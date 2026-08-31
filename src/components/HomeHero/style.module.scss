@@ -116,6 +116,15 @@
         padding: 0.3rem 0.5rem;
         gap: 0.3rem;
       }
+      .downloadBtn {
+        background: transparent;
+        color: var(--ascent-color);
+        border: 1px solid var(--ascent-color);
+        &:hover {
+          background: var(--ascent-color);
+          color: var(--primary-1);
+        }
+      }
       .HomeHeroIcons {
         font-size: 1.2rem;
       }

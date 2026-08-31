@@ -35,6 +35,7 @@ import {
   MdOutlineTheaterComedy,
 } from "react-icons/md";
 import { RiEye2Line, RiEye2Fill } from "react-icons/ri";
+import { BsStars, BsStar } from "react-icons/bs";
 import { usePathname, useSearchParams } from "next/navigation";
 
 const Navbar = ({ children }: any) => {
@@ -149,6 +150,19 @@ const Navbar = ({ children }: any) => {
           <IoLibrary className={styles.active} />
         ) : (
           <IoLibraryOutline className={styles.inactive} />
+        )}
+      </Link>
+      <Link
+        href="/ai"
+        aria-label="AI Assistant"
+        data-tooltip-id="tooltip"
+        data-tooltip-content="AI Assistant"
+        className={styles.mobileHide}
+      >
+        {pathname === "/ai" ? (
+          <BsStars className={styles.active} />
+        ) : (
+          <BsStar className={styles.inactive} />
         )}
       </Link>
       <Link

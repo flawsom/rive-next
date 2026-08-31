@@ -11,6 +11,7 @@ import {
   BsBookmarkPlus,
   BsFillBookmarkCheckFill,
   BsShare,
+  BsDownload,
 } from "react-icons/bs";
 import { FaPlay, FaYoutube } from "react-icons/fa";
 import {
@@ -22,6 +23,7 @@ import { navigatorShare } from "@/Utils/share";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/Utils/firebase";
 import { toast } from "sonner";
+import AIInsights from "@/components/AIInsights";
 
 const DetailPage = () => {
   const params = useSearchParams();
@@ -179,6 +181,14 @@ const DetailPage = () => {
                   >
                     watch <FaPlay className={styles.IconsMobileNone} />
                   </Link>
+                  <Link
+                    className={`${styles.links} ${styles.downloadBtn}`}
+                    data-tooltip-id="tooltip"
+                    data-tooltip-content="Download"
+                    href={`${type === "movie" ? `/watch?type=${type}&id=${data?.id}&source=download` : `/watch?type=${type}&id=${data?.id}&season=1&episode=1&source=download`}`}
+                  >
+                    download <BsDownload className={styles.IconsMobileNone} />
+                  </Link>
                   {trailer && (
                     <Link
                       className={styles.links}
@@ -222,6 +232,17 @@ const DetailPage = () => {
         </div>
       </div>
       <div className={styles.biggerDetail}>
+        {data?.title || data?.name ? (
+          <AIInsights
+            title={data?.title || data?.name}
+            type={type || "movie"}
+            overview={data?.overview || ""}
+            genres={data?.genres?.map((g: any) => g.name) || []}
+            rating={data?.vote_average}
+            year={data?.release_date || data?.first_air_date}
+            cast={data?.credits?.cast?.slice(0, 10).map((c: any) => c.name)}
+          />
+        ) : null}
         <MetaDetails id={id} type={type} data={data} />
       </div>
     </div>

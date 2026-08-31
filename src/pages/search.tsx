@@ -86,12 +86,12 @@ const SearchPage = ({ categoryType }: any) => {
     const debounceSearch = () => {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        if (query.length >= 3) {
+        if (query.length >= 2) {
           fetchData(true);
         }
-      }, 600);
+      }, 150); // Ultra-fast instant search
     };
-    if (query?.length > 2) debounceSearch();
+    if (query?.length > 1) debounceSearch();
     if (query?.length === 0) fetchData(false);
     return () => clearTimeout(debounceTimer);
   }, [query, currentPage]);
@@ -116,7 +116,7 @@ const SearchPage = ({ categoryType }: any) => {
           className={styles.searchInput}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Please enter at least 3 characters to search..."
+          placeholder="Search movies, shows, anime instantly..."
           onFocus={() => setIsSearchBarFocused(true)}
           onBlur={() => setIsSearchBarFocused(false)}
           // data-tooltip-id="tooltip"
@@ -130,7 +130,7 @@ const SearchPage = ({ categoryType }: any) => {
           )}
         </div>
       </div>
-      {query.length > 2 ? (
+      {query.length > 1 ? (
         <h1>
           showing result for <span className={styles.serachQuery}>{query}</span>
         </h1>
@@ -152,8 +152,8 @@ const SearchPage = ({ categoryType }: any) => {
               />
             );
           })}
-        {query.length > 2 && data?.length === 0 ? <h1>No Data Found</h1> : null}
-        {query.length > 2 && data === undefined
+        {query.length > 1 && data?.length === 0 ? <h1>No Data Found</h1> : null}
+        {query.length > 1 && data === undefined
           ? dummyList.map((ele) => <Skeleton className={styles.loading} />)
           : null}
         {genreListMovie?.length === 0 || genreListTv?.length === 0

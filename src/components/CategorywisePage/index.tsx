@@ -59,9 +59,9 @@ const CategorywisePage = ({ categoryDiv, categoryPage = null }: any) => {
                 ? categoryType === "tv"
                   ? "first_air_date.desc"
                   : "primary_release_date.desc"
-                : undefined || category === "trending"
+                : category === "trending"
                   ? "popularity.desc"
-                  : undefined || category === "topRated"
+                  : category === "topRated"
                     ? "vote_count.desc"
                     : undefined,
             genreKeywords: "210024,",
@@ -76,9 +76,9 @@ const CategorywisePage = ({ categoryDiv, categoryPage = null }: any) => {
                 ? categoryType === "tv"
                   ? "first_air_date.desc"
                   : "primary_release_date.desc"
-                : undefined || category === "trending"
+                : category === "trending"
                   ? "popularity.desc"
-                  : undefined || category === "topRated"
+                  : category === "topRated"
                     ? "vote_count.desc"
                     : undefined,
             genreKeywords: ",",

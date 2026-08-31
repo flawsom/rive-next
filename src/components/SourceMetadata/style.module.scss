@@ -1,0 +1,232 @@
+.sourceMetadata {
+  width: 100%;
+  z-index: 10;
+}
+
+.metadataBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.92);
+  }
+}
+
+.metadataLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.providerIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 0.25rem;
+  object-fit: contain;
+}
+
+.providerIconPlaceholder {
+  width: 28px;
+  height: 28px;
+  border-radius: 0.25rem;
+  background: linear-gradient(135deg, var(--ascent-color), #f59e0b);
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: sans-serif;
+}
+
+.metadataInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.providerName {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #fff;
+  font-size: 0.8rem;
+  font-family: sans-serif;
+  font-weight: 500;
+}
+
+.metadataBadges {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.qualityBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--ascent-color);
+  color: #000;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.15rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.langBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.15rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+}
+
+.subBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.15rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  font-weight: 500;
+}
+
+.dubBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.15rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  font-weight: 500;
+}
+
+.hindiBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.15rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  font-weight: 500;
+}
+
+.metadataRight {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.latency {
+  font-size: 0.65rem;
+  font-family: monospace;
+  font-weight: 500;
+}
+
+.autoSwitchTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.2rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  animation: pulseGlow 2s infinite;
+}
+
+@keyframes pulseGlow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.metadataExpanded {
+  background: rgba(0, 0, 0, 0.9);
+  padding: 0.75rem 1rem;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.detailRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.detailLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #94a3b8;
+  font-size: 0.7rem;
+  font-family: sans-serif;
+}
+
+.detailValue {
+  color: #e2e8f0;
+  font-size: 0.7rem;
+  font-family: sans-serif;
+  font-weight: 500;
+}
+
+.autoSwitchInfo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(96, 165, 250, 0.1);
+  border-radius: 0.3rem;
+  color: #60a5fa;
+  font-size: 0.7rem;
+  font-family: sans-serif;
+
+  strong {
+    color: #93c5fd;
+  }
+}
+
+@media (max-width: 769px) {
+  .metadataBar {
+    padding: 0.4rem 0.75rem;
+  }
+
+  .metadataBadges {
+    gap: 0.25rem;
+  }
+}

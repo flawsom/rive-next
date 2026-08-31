@@ -42,27 +42,40 @@ Steps to get TMDB API KEY
 ## 3. Video Streaming API
 
 ```.env
-NEXT_PUBLIC_STREAM_URL_AGG=
-NEXT_PUBLIC_STREAM_URL_VID=
-NEXT_PUBLIC_STREAM_URL_PRO=
-NEXT_PUBLIC_STREAM_URL_EMB=
-NEXT_PUBLIC_STREAM_URL_MULTI=
-NEXT_PUBLIC_STREAM_URL_SUP=
+NEXT_PUBLIC_STREAM_URL=
 ```
 
-These are all the different streaming services used, that can't be disclosed directly.  
-But I can give you a hint..
+This is the single streaming source URL (HDHub4U embed domain).  
+The app uses a clean single-source architecture.
 
 > [!TIP]  
-> We offer free streaming links for movies and episodes that can be  
-> effortlessly integrated into your website through our embed links, API
+> Set this to your HDHub4U embed URL domain. The watch page will construct  
+> movie and TV show URLs using: `${STREAM_URL}/movie/{id}` and  
+> `${STREAM_URL}/tv/{id}/{season}/{episode}`
 
-You can do some research over internet using this quote to get the services.  
-And if you are going to create your own website, then I would recommend to go through [github-issue](https://github.com/AdvithGopinath/LetMeWatch/issues/4).  
-They have created a list of services, but some may have stopped working, still you will get working ones also.  
-If you do some researching, then you will find the right services here.
+## 4. AI Integration (OpenAI)
 
-If there are anymore env vars left, give them any random values, as they were used in dev only and not in prod.
+```.env
+OPENAI_API_KEY=
+```
+
+This powers the AI features including:
+
+- **AI Chat Assistant** (`/ai` page) — conversational movie/show recommendations
+- **AI Content Insights** — personalized insights on detail pages
+- **AI-Powered Search** — enhanced content discovery
+
+Steps to get the OpenAI API Key:
+
+- Go to [OpenAI Platform](https://platform.openai.com/)
+- Sign up or log in
+- Navigate to API Keys section
+- Create a new secret key
+- Copy the key into your `.env` file
+
+> [!NOTE]
+> The AI features will gracefully degrade if no API key is provided.  
+> The chat will show an error message, and content insights will be hidden.
 
 ## **Disclaimer**
 

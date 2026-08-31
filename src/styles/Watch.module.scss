@@ -30,15 +30,107 @@
     background: var(--bg-color);
     color: var(--primary-3);
     outline: none;
-    // border: 1px solid var(--primary-2);
     border: none;
     border-radius: 0.5rem;
     margin: 1rem auto;
     line-height: 1rem;
     z-index: 2;
-    // &[selected="true"]{
-    //   color: var(--ascent-color);
-    // }
+  }
+  .sourceTag {
+    position: absolute;
+    top: 0;
+    padding: 0.5rem 1.5rem;
+    background: var(--bg-color);
+    color: var(--primary-3);
+    border-radius: 0 0 0.5rem 0.5rem;
+    font-size: 0.8rem;
+    z-index: 2;
+    font-family: sans-serif;
+    border: 1px solid var(--bg-gradient);
+    border-top: none;
+  }
+  .sourceMessage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--primary-2);
+    z-index: 2;
+    background: var(--primary-1);
+    padding: 2rem;
+    border-radius: 1rem;
+    border: 1px solid var(--bg-gradient);
+    max-width: 30rem;
+    p {
+      margin: 0.5rem 0;
+      font-size: 0.9rem;
+    }
+    code {
+      background: var(--bg-color);
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.2rem;
+      font-size: 0.8rem;
+    }
+    .hint {
+      font-size: 0.75rem;
+      opacity: 0.7;
+    }
+  }
+  .switchSourceBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1rem;
+    padding: 0.5rem 1.2rem;
+    background: var(--ascent-color);
+    color: var(--primary-1);
+    border: none;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: sans-serif;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    &:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+    }
+  }
+  .downloadBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1.2rem;
+    background: transparent;
+    color: var(--ascent-color);
+    border: 1px solid var(--ascent-color);
+    border-radius: 0.4rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: sans-serif;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    &:hover {
+      background: var(--ascent-color);
+      color: var(--primary-1);
+    }
+  }
+  .sourceSelectorOverlay {
+    position: absolute;
+    top: 4rem;
+    right: 1rem;
+    width: clamp(280px, 40vw, 420px);
+    max-height: calc(100vh - 8rem);
+    overflow-y: auto;
+    z-index: 15;
+    background: var(--primary-1);
+    border-radius: 0.5rem;
+    border: 1px solid var(--bg-gradient);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
   .backBtn {
     position: absolute;
@@ -93,6 +185,11 @@
     :where(.backBtn, .episodeControl) svg {
       margin-top: 1rem;
       font-size: 1.3rem;
+    }
+    .sourceSelectorOverlay {
+      width: calc(100vw - 2rem);
+      right: 0.5rem;
+      top: 5rem;
     }
   }
 }

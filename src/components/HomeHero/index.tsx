@@ -9,6 +9,7 @@ import {
   BsBookmarkPlus,
   BsFillBookmarkCheckFill,
   BsShare,
+  BsDownload,
 } from "react-icons/bs";
 import { FaInfo, FaPlay } from "react-icons/fa";
 import {
@@ -150,6 +151,14 @@ const HomeHero = () => {
                   data-tooltip-content="Watch Online"
                 >
                   watch <FaPlay />
+                </Link>
+                <Link
+                  className={`${styles.links} ${styles.downloadBtn}`}
+                  href={`${data[index]?.media_type === "movie" ? `/watch?type=${data[index]?.media_type}&id=${data[index]?.id}&source=download` : `/watch?type=${data[index]?.media_type}&id=${data[index]?.id}&season=1&episode=1&source=download`}`}
+                  data-tooltip-id="tooltip"
+                  data-tooltip-content="Download"
+                >
+                  download <BsDownload />
                 </Link>
                 <Link
                   className={styles.links}

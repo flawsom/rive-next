@@ -1,0 +1,204 @@
+.aiInsights {
+  background: var(--primary-1);
+  border: 1px solid var(--bg-gradient);
+  border-radius: 1rem;
+  padding: 1.2rem;
+  margin: 1rem 0;
+
+  .sourceCard {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 215, 0, 0.05),
+      rgba(255, 215, 0, 0.02)
+    );
+    border: 1px solid rgba(255, 215, 0, 0.15);
+    border-radius: 0.6rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+
+    .sourceCardHeader {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 0.5rem;
+
+      .sourceIcon {
+        color: var(--ascent-color);
+        font-size: 0.85rem;
+      }
+
+      .sourceLabel {
+        font-size: 0.65rem;
+        color: var(--ascent-color);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-family: sans-serif;
+      }
+    }
+
+    .sourceCardContent {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+
+      .sourceInfo {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+
+        strong {
+          color: var(--primary-4);
+          font-size: 0.9rem;
+          font-family: sans-serif;
+        }
+
+        .sourceDesc {
+          color: var(--primary-2);
+          font-size: 0.7rem;
+          font-family: sans-serif;
+        }
+      }
+
+      .sourceBadges {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+
+        .langBadge,
+        .qualityBadge,
+        .subBadge,
+        .dubBadge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.15rem;
+          padding: 0.1rem 0.35rem;
+          border-radius: 0.15rem;
+          font-size: 0.6rem;
+          font-family: sans-serif;
+          font-weight: 500;
+        }
+
+        .langBadge {
+          background: rgba(255, 255, 255, 0.1);
+          color: #e2e8f0;
+        }
+
+        .qualityBadge {
+          background: var(--ascent-color);
+          color: var(--primary-1);
+        }
+
+        .subBadge {
+          background: rgba(74, 222, 128, 0.15);
+          color: #4ade80;
+        }
+
+        .dubBadge {
+          background: rgba(96, 165, 250, 0.15);
+          color: #60a5fa;
+        }
+      }
+
+      .latencyInfo {
+        font-size: 0.65rem;
+        color: var(--primary-2);
+        font-family: sans-serif;
+      }
+    }
+  }
+
+  .aiInsightsHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--bg-gradient);
+
+    .sparkleIcon {
+      color: var(--ascent-color);
+      font-size: 1.1rem;
+    }
+
+    h3 {
+      font-size: 0.95rem;
+      color: var(--primary-3);
+      margin: 0;
+      font-family: sans-serif;
+    }
+  }
+
+  .loadingSkeleton {
+    padding: 0.5rem 0;
+  }
+
+  .insightSection {
+    margin-bottom: 0.8rem;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    .summary {
+      font-size: 0.85rem;
+      color: var(--primary-3);
+      line-height: 1.6;
+      font-style: italic;
+      padding: 0.6rem 0.8rem;
+      background: var(--bg-color);
+      border-radius: 0.5rem;
+      border-left: 3px solid var(--ascent-color);
+    }
+
+    .sectionLabel {
+      font-size: 0.75rem;
+      color: var(--ascent-color);
+      font-weight: bold;
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-family: sans-serif;
+    }
+
+    p {
+      font-size: 0.8rem;
+      color: var(--primary-2);
+      line-height: 1.5;
+      margin: 0;
+    }
+
+    .moodTags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+
+      .moodTag {
+        background: var(--bg-color);
+        color: var(--primary-3);
+        padding: 0.25rem 0.6rem;
+        border-radius: 1rem;
+        font-size: 0.7rem;
+        border: 1px solid var(--bg-gradient);
+      }
+    }
+
+    .similarList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+
+      .similarItem {
+        background: var(--bg-color);
+        color: var(--primary-3);
+        padding: 0.25rem 0.6rem;
+        border-radius: 0.3rem;
+        font-size: 0.7rem;
+        border: 1px solid var(--bg-gradient);
+      }
+    }
+  }
+}

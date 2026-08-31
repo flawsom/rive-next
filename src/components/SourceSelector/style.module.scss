@@ -1,0 +1,380 @@
+.sourceSelector {
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--bg-gradient);
+  border-radius: 0.5rem 0.5rem 0 0;
+  border: 1px solid var(--bg-color);
+  border-bottom: none;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.headerIcon {
+  color: var(--ascent-color);
+  font-size: 1.1rem;
+}
+
+.header h3 {
+  color: var(--primary-4);
+  font-size: 1rem;
+  font-family: sans-serif;
+  font-weight: 600;
+}
+
+.sourceCount {
+  background: var(--primary-1);
+  color: var(--primary-2);
+  padding: 0.15rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  font-family: sans-serif;
+}
+
+.refreshBtn {
+  background: transparent;
+  border: 1px solid var(--primary-2);
+  color: var(--primary-3);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+
+  &:hover {
+    background: var(--ascent-color);
+    color: var(--primary-1);
+    border-color: var(--ascent-color);
+  }
+}
+
+.bestSourceBanner {
+  padding: 0.75rem 1rem;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 0, 0.08),
+    rgba(255, 215, 0, 0.02)
+  );
+  border-left: 3px solid var(--ascent-color);
+  border-right: 1px solid var(--bg-color);
+}
+
+.bestBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--ascent-color);
+  font-size: 0.7rem;
+  font-family: sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.4rem;
+}
+
+.bestSourceCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: var(--primary-1);
+  border-radius: 0.4rem;
+  border: 1px solid var(--bg-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: var(--ascent-color);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.1);
+  }
+}
+
+.sourceCardLeft {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.sourceIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.5rem;
+  object-fit: contain;
+}
+
+.sourceIconPlaceholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, var(--ascent-color), #f59e0b);
+  color: var(--primary-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-family: sans-serif;
+}
+
+.sourceIconSmall {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.3rem;
+  object-fit: contain;
+}
+
+.sourceIconPlaceholderSmall {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.3rem;
+  background: var(--bg-gradient);
+  color: var(--primary-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: sans-serif;
+}
+
+.sourceInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sourceInfoSmall {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sourceNameRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  h4 {
+    color: var(--primary-4);
+    font-size: 1rem;
+    font-family: sans-serif;
+    font-weight: 600;
+  }
+}
+
+.sourceNameRowSmall {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  h5 {
+    color: var(--primary-3);
+    font-size: 0.85rem;
+    font-family: sans-serif;
+    font-weight: 500;
+  }
+}
+
+.defaultBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: var(--ascent-color);
+  color: var(--primary-1);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.2rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.defaultBadgeSmall {
+  background: var(--ascent-color);
+  color: var(--primary-1);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.2rem;
+  font-size: 0.55rem;
+  font-family: sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sourceDesc {
+  color: var(--primary-2);
+  font-size: 0.75rem;
+  font-family: sans-serif;
+}
+
+.sourceDescSmall {
+  color: var(--primary-2);
+  font-size: 0.7rem;
+  font-family: sans-serif;
+}
+
+.sourceMeta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.15rem;
+}
+
+.sourceMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-family: sans-serif;
+  color: var(--primary-2);
+}
+
+.sourceMetaSmall {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    font-size: 0.65rem;
+    font-family: sans-serif;
+    color: var(--primary-2);
+  }
+}
+
+.latencyBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-weight: 500;
+}
+
+.capabilities {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-top: 0.2rem;
+}
+
+.capBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  background: rgba(255, 215, 0, 0.1);
+  color: var(--ascent-color);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.15rem;
+  font-size: 0.6rem;
+  font-family: sans-serif;
+  font-weight: 500;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.expandToggle {
+  width: 100%;
+  background: var(--primary-1);
+  border: 1px solid var(--bg-color);
+  border-top: none;
+  color: var(--primary-2);
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: sans-serif;
+  transition: all 0.2s ease;
+
+  &:hover {
+    color: var(--ascent-color);
+    background: var(--bg-gradient);
+  }
+}
+
+.altSources {
+  overflow: hidden;
+  padding: 0.5rem;
+  background: var(--primary-1);
+  border: 1px solid var(--bg-color);
+  border-top: none;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+.sourceCard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-gradient);
+  border-radius: 0.35rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.3rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &:hover {
+    border-color: var(--ascent-color);
+    background: rgba(255, 215, 0, 0.05);
+  }
+}
+
+.active {
+  border-color: var(--ascent-color) !important;
+  background: rgba(255, 215, 0, 0.08) !important;
+}
+
+.sourceCardRight {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.activeCheck {
+  color: var(--ascent-color);
+  font-size: 1rem;
+}
+
+.warningIcon {
+  color: #f87171;
+  font-size: 0.9rem;
+}
+
+.unavailableTag {
+  color: #f87171 !important;
+
+  svg {
+    color: #f87171;
+  }
+}
+
+.sourceCardSkeleton {
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+@media (max-width: 769px) {
+  .sourceMeta {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .bestSourceCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
