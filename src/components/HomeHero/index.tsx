@@ -34,7 +34,6 @@ const HomeHero = () => {
   const [bookmarked, setBookmarked] = useState<any>(false);
   const [user, setUser] = useState<any>();
   const [bookmarkList, setBookmarkList] = useState<any>();
-  console.log({ index });
   useEffect(() => {
     setLoading(true);
     const fetchData = async () => {
@@ -53,17 +52,19 @@ const HomeHero = () => {
       }
     };
     fetchData();
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userID = user.uid;
-        setUser(userID);
-        // setBookmarkList(await getBookmarks({ userId: userID }));
-        // setBookmarkList(getBookmarks(userID));
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
-    });
+    if (auth) {
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          const userID = user.uid;
+          setUser(userID);
+          // setBookmarkList(await getBookmarks({ userId: userID }));
+          // setBookmarkList(getBookmarks(userID));
+          setLoading(false);
+        } else {
+          setLoading(true);
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {

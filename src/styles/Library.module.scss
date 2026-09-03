@@ -45,6 +45,23 @@
     .watchlistItems {
       max-width: 10rem;
     }
+    .foryouItem {
+      display: flex;
+      flex-direction: column;
+      max-width: 10rem;
+    }
+    .reasonLine {
+      margin-top: 0.4rem;
+      font-size: 0.72rem;
+      line-height: 1.25;
+      color: var(--primary-2);
+      opacity: 0.85;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      min-height: 1.8em;
+    }
   }
   .pagination {
     list-style: none;

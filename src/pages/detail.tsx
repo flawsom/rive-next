@@ -36,8 +36,24 @@ const DetailPage = () => {
   const [data, setData] = useState<any>({});
   const [bookmarked, setBookmarked] = useState(false);
   const [trailer, setTrailer] = useState<any>("");
+  const [trailerOpen, setTrailerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>();
+
+  // Close the trailer modal on Escape; cleanup the key listener.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTrailerOpen(false);
+    };
+    if (trailerOpen) {
+      window.addEventListener("keydown", onKey);
+      document.body.style.overflow = "hidden";
+    }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [trailerOpen]);
 
   useEffect(() => {
     setLoading(true);
@@ -85,6 +101,10 @@ const DetailPage = () => {
   }, [params, id]);
 
   useEffect(() => {
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userID = user.uid;
@@ -190,15 +210,15 @@ const DetailPage = () => {
                     download <BsDownload className={styles.IconsMobileNone} />
                   </Link>
                   {trailer && (
-                    <Link
+                    <button
+                      type="button"
                       className={styles.links}
                       data-tooltip-id="tooltip"
                       data-tooltip-content="Watch Trailer"
-                      href={`https://youtube.com/watch?v=${trailer.key}`}
-                      target="_blank"
+                      onClick={() => setTrailerOpen(true)}
                     >
                       trailer <FaYoutube className={styles.IconsMobileNone} />
-                    </Link>
+                    </button>
                   )}
                   {bookmarked ? (
                     <BsFillBookmarkCheckFill
@@ -245,6 +265,38 @@ const DetailPage = () => {
         ) : null}
         <MetaDetails id={id} type={type} data={data} />
       </div>
+
+      {trailerOpen && trailer?.key && (
+        <div
+          className={styles.trailerModal}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Trailer"
+          onClick={() => setTrailerOpen(false)}
+        >
+          <div
+            className={styles.trailerFrame}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={styles.trailerClose}
+              data-tooltip-id="tooltip"
+              data-tooltip-content="Close"
+              aria-label="Close trailer"
+              onClick={() => setTrailerOpen(false)}
+            >
+              ✕
+            </button>
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${trailer.key}?autoplay=1&rel=0&modestbranding=1`}
+              title={`${data?.title || data?.name || ""} trailer`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,8 +1,7 @@
 // Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
+import { getFirestore, type Firestore } from "firebase/firestore";
 import { GoogleAuthProvider } from "firebase/auth";
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
@@ -19,9 +18,24 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FB_MEASUREMENT_ID,
 };
 
-// Initialize Firebase
-export const app = initializeApp(firebaseConfig);
-// export const analytics = getAnalytics(app);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const provider = new GoogleAuthProvider();
+// Only initialize Firebase when the operator configured real keys.
+// With missing/invalid config, `getAuth()` throws at module scope and crashes
+// SSR on every page — instead the app degrades to local/guest mode and the
+// login/sync features show a clear "not configured" message.
+const hasValidConfig = Boolean(
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.appId,
+);
+
+export const firebaseConfigured = hasValidConfig;
+
+export const app: FirebaseApp | null = hasValidConfig
+  ? initializeApp(firebaseConfig)
+  : null;
+export const auth: Auth | null = hasValidConfig && app ? getAuth(app) : null;
+export const db: Firestore | null =
+  hasValidConfig && app ? getFirestore(app) : null;
+export const provider: GoogleAuthProvider | null =
+  hasValidConfig && app ? new GoogleAuthProvider() : null;

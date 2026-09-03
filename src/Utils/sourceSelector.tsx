@@ -1,10 +1,9 @@
 /**
- * Smart Source Selector
- * Tests latency, availability, and picks the best working source automatically
- * Falls back to alternatives if the current source fails
+ * Smart source selection policy.
+ * Provider entries are metadata; availability is only reported for configured endpoints.
  */
 
-import { ALL_PROVIDERS, Provider, getProvidersByCategory } from "./providers";
+import { Provider, getProvidersByCategory } from "./providers";
 import {
   getCachedDomain,
   recordDomainFailure,
@@ -26,28 +25,20 @@ export interface SourceSelection {
   allAvailable: SourceHealth[];
 }
 
-const healthMap: Map<string, SourceHealth> = new Map();
-const LATENCY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const healthMap = new Map<string, SourceHealth>();
+const LATENCY_CACHE_TTL = 5 * 60 * 1000;
 const MAX_FAILURES = 3;
-const FAILURE_COOLDOWN = 10 * 60 * 1000; // 10 minutes
+const FAILURE_COOLDOWN = 10 * 60 * 1000;
 
 export function recordFailure(providerId: string): void {
   const existing = healthMap.get(providerId);
-  if (existing) {
-    existing.failureCount += 1;
-    existing.lastChecked = Date.now();
-    if (existing.failureCount >= MAX_FAILURES) {
-      existing.available = false;
-    }
-  } else {
-    healthMap.set(providerId, {
-      providerId,
-      latency: Infinity,
-      available: false,
-      lastChecked: Date.now(),
-      failureCount: 1,
-    });
-  }
+  healthMap.set(providerId, {
+    providerId,
+    latency: existing?.latency ?? Infinity,
+    available: false,
+    lastChecked: Date.now(),
+    failureCount: (existing?.failureCount || 0) + 1,
+  });
 }
 
 export function recordSuccess(providerId: string, latency: number): void {
@@ -60,32 +51,30 @@ export function recordSuccess(providerId: string, latency: number): void {
   });
 }
 
-function isHealthStale(health: SourceHealth): boolean {
-  return Date.now() - health.lastChecked > LATENCY_CACHE_TTL;
-}
-
-function isFailureCooldownOver(health: SourceHealth): boolean {
+function canRetry(health: SourceHealth): boolean {
   return (
     health.failureCount >= MAX_FAILURES &&
     Date.now() - health.lastChecked > FAILURE_COOLDOWN
   );
 }
 
-async function measureLatency(url: string, timeoutMs = 4000): Promise<number> {
+async function measureLatency(url: string, timeoutMs = 4_000): Promise<number> {
   const start = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    await fetch(url, {
+    const response = await fetch(url, {
       method: "HEAD",
-      mode: "no-cors",
       signal: controller.signal,
       cache: "no-store",
     });
-    clearTimeout(timer);
-    return Date.now() - start;
+    return response.ok || response.type === "opaque"
+      ? Date.now() - start
+      : Infinity;
   } catch {
     return Infinity;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -103,95 +92,78 @@ export async function selectBestSource(
   preferredId?: string,
 ): Promise<SourceSelection> {
   const candidates = getProvidersByCategory(category);
-  if (candidates.length === 0) {
+  if (!candidates.length)
     throw new Error(`No providers available for category: ${category}`);
-  }
 
-  const healthChecks: Promise<SourceHealth>[] = candidates.map(
-    async (provider) => {
+  const results = await Promise.all(
+    candidates.map(async (provider): Promise<SourceHealth> => {
       const cached = healthMap.get(provider.id);
-
-      if (cached && !isHealthStale(cached) && cached.available) {
+      if (
+        cached &&
+        Date.now() - cached.lastChecked < LATENCY_CACHE_TTL &&
+        (cached.available || !canRetry(cached))
+      )
         return cached;
+
+      const domain = getCachedDomain(provider.id);
+      if (!domain && !provider.embedBase) {
+        const unavailable = {
+          providerId: provider.id,
+          latency: Infinity,
+          available: false,
+          lastChecked: Date.now(),
+          failureCount: (cached?.failureCount || 0) + 1,
+        };
+        healthMap.set(provider.id, unavailable);
+        return unavailable;
       }
 
-      if (cached && !isFailureCooldownOver(cached) && !cached.available) {
-        return cached;
-      }
-
-      // Use the autonomous domain resolver to get the best URL for testing
-      const liveDomain = getCachedDomain(provider.id);
-      const testUrl = liveDomain
-        ? `${liveDomain.startsWith("http") ? liveDomain : `https://${liveDomain}`}/`
-        : provider.embedBase
-          ? `${provider.embedBase}/`
-          : `https://www.google.com/favicon.ico`;
-
-      const latency = await measureLatency(testUrl);
-      const health: SourceHealth = {
+      const base = domain || provider.embedBase;
+      const latency = await measureLatency(
+        base!.startsWith("http") ? base! : `https://${base}`,
+      );
+      const health = {
         providerId: provider.id,
         latency,
         available: latency < Infinity,
         lastChecked: Date.now(),
-        failureCount:
-          latency >= Infinity
-            ? (healthMap.get(provider.id)?.failureCount || 0) + 1
-            : 0,
+        failureCount: latency < Infinity ? 0 : (cached?.failureCount || 0) + 1,
       };
-
       healthMap.set(provider.id, health);
-
-      // Also update the domain resolver with success/failure
-      if (health.available && testUrl) {
-        recordDomainSuccess(provider.id, testUrl, latency);
-      } else if (!health.available && testUrl) {
-        recordDomainFailure(provider.id, testUrl);
-      }
-
+      if (health.available) recordDomainSuccess(provider.id, base!, latency);
+      else recordDomainFailure(provider.id, base!);
       return health;
-    },
+    }),
   );
 
-  const results = await Promise.all(healthChecks);
-
   const ranked = candidates
-    .map((provider) => {
-      const health = results.find((r) => r.providerId === provider.id)!;
-      return { provider, health };
-    })
-    .filter((entry) => entry.health.available)
+    .map((provider) => ({
+      provider,
+      health: results.find((item) => item.providerId === provider.id)!,
+    }))
+    .filter(({ health }) => health.available)
     .sort((a, b) => {
-      if (preferredId) {
-        if (a.provider.id === preferredId) return -1;
-        if (b.provider.id === preferredId) return 1;
-      }
-      if (a.provider.isDefault && !b.provider.isDefault) return -1;
-      if (!a.provider.isDefault && b.provider.isDefault) return 1;
-      if (a.health.latency !== b.health.latency) {
-        return a.health.latency - b.health.latency;
-      }
-      return a.provider.priority - b.provider.priority;
+      if (preferredId && a.provider.id !== b.provider.id)
+        return a.provider.id === preferredId
+          ? -1
+          : b.provider.id === preferredId
+            ? 1
+            : 0;
+      if (a.provider.isDefault !== b.provider.isDefault)
+        return a.provider.isDefault ? -1 : 1;
+      return (
+        a.health.latency - b.health.latency ||
+        a.provider.priority - b.provider.priority
+      );
     });
 
-  if (ranked.length === 0) {
-    const fallback = preferredId
-      ? candidates.find((p) => p.id === preferredId) || candidates[0]
-      : candidates[0];
-    return {
-      provider: fallback,
-      latency: Infinity,
-      alternatives: [],
-      allAvailable: results,
-    };
-  }
-
-  const best = ranked[0];
-  const alternatives = ranked.slice(1).map((entry) => entry.provider);
-
+  const fallback =
+    candidates.find((provider) => provider.id === preferredId) || candidates[0];
+  const selected = ranked[0];
   return {
-    provider: best.provider,
-    latency: best.health.latency,
-    alternatives,
+    provider: selected?.provider || fallback,
+    latency: selected?.health.latency ?? Infinity,
+    alternatives: ranked.slice(1).map(({ provider }) => provider),
     allAvailable: results,
   };
 }
@@ -201,42 +173,29 @@ export async function selectBestSourceForContent(
   type: "movie" | "tv",
   category?: "anime" | "cartoon" | "asianDrama",
 ): Promise<SourceSelection> {
-  let effectiveCategory: "movie" | "tv" | "anime" | "cartoon" | "asianDrama";
-  if (category) {
-    effectiveCategory = category;
-  } else {
-    effectiveCategory = type;
-  }
-
-  const titleLower = title.toLowerCase();
-  const isAnime =
-    /\banime\b|\bmanga\b|\bnaruto\b|\bone piece\b|\bdragon ball\b|\bjujutsu\b|\battack on titan\b|\bdemon slayer\b|\bmy hero\b|\bchainsaw man\b/i.test(
-      titleLower,
-    );
-  const isCartoon =
-    /\bcartoon\b|\bdoraemon\b|\bben 10\b|\bspongebob\b|\btom and jerry\b|\bhorrid henry\b|\bshin chan\b|\bpowerpuff\b/i.test(
-      titleLower,
-    );
-  const isAsianDrama =
-    /\bk[- ]?drama\b|\bkorean\b|\bkdrama\b|\bjapanese\b|\bchinese drama\b|\bthai drama\b|\bepisode\b.*\bsub\b/i.test(
-      titleLower,
-    );
-
-  if (isAnime) effectiveCategory = "anime";
-  else if (isCartoon) effectiveCategory = "cartoon";
-  else if (isAsianDrama) effectiveCategory = "asianDrama";
-
-  return selectBestSource(effectiveCategory, "hdhub4u");
+  const value = title.toLowerCase();
+  const detected =
+    category ||
+    (/anime|manga|naruto|one piece|demon slayer|jujutsu|dragon ball/i.test(
+      value,
+    )
+      ? "anime"
+      : /cartoon|doraemon|ben 10|spongebob|shin chan/i.test(value)
+        ? "cartoon"
+        : /k-?drama|korean|japanese|chinese drama/i.test(value)
+          ? "asianDrama"
+          : type);
+  // For movies/TV the default is HDHub4U or MoviesDrive, decided purely by
+  // latency and availability. Anime prefers Anichi only as the fallback anchor.
+  return selectBestSource(
+    detected,
+    detected === "anime" ? "anichi" : undefined,
+  );
 }
 
 export function getHealthStatus(): SourceHealth[] {
   return Array.from(healthMap.values());
 }
-
 export function resetHealth(providerId?: string): void {
-  if (providerId) {
-    healthMap.delete(providerId);
-  } else {
-    healthMap.clear();
-  }
+  providerId ? healthMap.delete(providerId) : healthMap.clear();
 }

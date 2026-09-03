@@ -11,6 +11,13 @@ import {
 } from "react-icons/bs";
 import { FaLanguage, FaMicrophone, FaServer } from "react-icons/fa";
 
+const QUALITY_LABELS: Record<string, string> = {
+  "4K": "4K Ultra HD \u2022 up to 2160p",
+  FHD: "Full HD \u2022 1080p",
+  HD: "HD \u2022 720p",
+  SD: "SD \u2022 480p",
+};
+
 interface SourceMetadataProps {
   providerName: string;
   providerIcon?: string;
@@ -133,6 +140,16 @@ const SourceMetadata = ({
             </span>
             <span className={styles.detailValue}>{quality}</span>
           </div>
+          {QUALITY_LABELS[quality] && (
+            <div className={styles.detailRow}>
+              <span className={styles.detailLabel}>
+                <BsBadgeHdFill /> Resolution
+              </span>
+              <span className={styles.detailValue}>
+                {QUALITY_LABELS[quality]}
+              </span>
+            </div>
+          )}
           <div className={styles.detailRow}>
             <span className={styles.detailLabel}>
               <BsGlobe2 /> Language

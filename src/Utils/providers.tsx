@@ -1411,11 +1411,81 @@ export const CSX_PROVIDERS: Provider[] = [
   },
 ];
 
-// ─── Combined Provider List ─────────────────────────────────────────────────
+// ─── Combined Provider List (approved set) ──────────────────────────────────
+// Only these sources are enabled for the consumer app:
+//  - Phisher repo: HDHub4U, 4K HDHub, and the approved Anime/Cartoon set
+//  - CSX repo: all sources (MoviesDrive, Bollyflix, CineStream, MoviesMod, VegaMovies)
+// Every other entry remains defined but is excluded from the active registry.
+export const APPROVED_PROVIDER_IDS = new Set<string>([
+  // Movies & TV (Phisher)
+  "hdhub4u",
+  "fourkhdhub",
+  // Anime (Phisher)
+  "anichi",
+  "anidb",
+  "anikage",
+  "anikoto",
+  "anilight",
+  "animepahe",
+  "anineko",
+  "anizone",
+  "kickassanime",
+  "onepace",
+  "animexin",
+  "animenosub",
+  "allwish",
+  // Anime & Cartoons, Hindi (Phisher)
+  "animedekho",
+  "animedubhindi",
+  "animekhor",
+  "animesalt",
+  "dorabash",
+  "kartoons",
+  "piratexplay",
+  "ringz",
+  // CSX repo (all)
+  "moviesdrive",
+  "bollyflix",
+  "cinestream",
+  "moviesmod",
+  "vegamovies",
+]);
+
 export const ALL_PROVIDERS: Provider[] = [
   ...PHISHER_PROVIDERS,
   ...CSX_PROVIDERS,
-];
+].filter((provider) => APPROVED_PROVIDER_IDS.has(provider.id));
+
+// ─── Quality Tiers ──────────────────────────────────────────────────────────
+export type QualityTier = "4K" | "FHD" | "HD" | "SD";
+
+const QUALITY_TIER_MAP: Partial<Record<string, QualityTier>> = {
+  hdhub4u: "FHD",
+  fourkhdhub: "4K",
+  moviesdrive: "4K",
+  bollyflix: "4K",
+  cinestream: "4K",
+  moviesmod: "4K",
+  vegamovies: "4K",
+};
+
+export function getProviderQualityTier(
+  provider: Pick<Provider, "id" | "capabilities">,
+): QualityTier {
+  return (
+    QUALITY_TIER_MAP[provider.id] || (provider.capabilities.hq ? "HD" : "SD")
+  );
+}
+
+export function getQualityLabel(tier: QualityTier): string {
+  const labels: Record<QualityTier, string> = {
+    "4K": "4K Ultra HD • up to 2160p",
+    FHD: "Full HD • 1080p",
+    HD: "HD • 720p",
+    SD: "SD • 480p",
+  };
+  return labels[tier];
+}
 
 // ─── Helper Functions ───────────────────────────────────────────────────────
 

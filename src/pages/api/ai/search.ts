@@ -1,122 +1,67 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import {
-  ALL_PROVIDERS,
-  getProvidersByCategory,
-  searchProviders,
-} from "@/Utils/providers";
+import { ALL_PROVIDERS, getProvidersByCategory } from "@/Utils/providers";
 import { selectBestSourceForContent } from "@/Utils/sourceSelector";
-
-interface SearchResult {
-  query: string;
-  bestSource: {
-    provider: {
-      id: string;
-      name: string;
-      description: string;
-      language: string;
-      capabilities: any;
-    };
-    latency: number;
-  };
-  availableSources: {
-    id: string;
-    name: string;
-    description: string;
-    language: string;
-    capabilities: any;
-    priority: number;
-  }[];
-  categoryDetected: string;
-  totalProviders: number;
-}
+import {
+  asBoundedString,
+  rejectUnsupportedMethod,
+  setPrivateApiHeaders,
+  withTimeout,
+} from "@/Utils/apiValidation";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  setPrivateApiHeaders(res);
+  if (rejectUnsupportedMethod(req, res)) return;
 
-  const { query, type, category } = req.body;
+  const body = req.body || {};
+  const query = asBoundedString(body.query, 200);
+  if (!query)
+    return res.status(400).json({ error: "A valid query is required" });
 
-  if (!query) {
-    return res.status(400).json({ error: "query is required" });
-  }
+  const contentType = body.type === "tv" ? "tv" : "movie";
+  const category = ["anime", "cartoon", "asianDrama"].includes(body.category)
+    ? body.category
+    : undefined;
+  const q = query.toLowerCase();
+  const detectedCategory =
+    category ||
+    (/\banime\b|\bmanga\b|\bnaruto\b|\bone piece\b|\bdemon slayer\b|\battack on titan\b|\bjujutsu\b|\bdragon ball\b/i.test(
+      q,
+    )
+      ? "anime"
+      : /\bcartoon\b|\bdoraemon\b|\bben 10\b|\bspongebob\b|\bshin chan\b|\btom and jerry\b/i.test(
+            q,
+          )
+        ? "cartoon"
+        : /\bk[- ]?drama\b|\bkorean\b|\bkdrama\b|\bjapanese drama\b|\bchinese drama\b/i.test(
+              q,
+            )
+          ? "asianDrama"
+          : undefined);
 
   try {
-    const contentType = (type as "movie" | "tv") || "movie";
-    const contentCategory = category as
-      "anime" | "cartoon" | "asianDrama" | undefined;
-
-    // Detect content type from query
-    let detectedCategory = contentCategory;
-    const q = query.toLowerCase();
-
-    if (!detectedCategory) {
-      if (
-        /\banime\b|\bmanga\b|\bnaruto\b|\bone piece\b|\bdemon slayer\b|\battack on titan\b|\bjujutsu\b|\bdragon ball\b|\bmy hero\b|\bchainsaw man\b/i.test(
-          q,
-        )
-      ) {
-        detectedCategory = "anime";
-      } else if (
-        /\bcartoon\b|\bdoraemon\b|\bben 10\b|\bspongebob\b|\bshin chan\b|\btom and jerry\b/i.test(
-          q,
-        )
-      ) {
-        detectedCategory = "cartoon";
-      } else if (
-        /\bk[- ]?drama\b|\bkorean\b|\bkdrama\b|\bjapanese drama\b|\bchinese drama\b/i.test(
-          q,
-        )
-      ) {
-        detectedCategory = "asianDrama";
-      }
-    }
-
-    // Get best source
-    const selection = await selectBestSourceForContent(
-      query,
-      contentType,
-      detectedCategory,
+    const selection = await withTimeout(
+      selectBestSourceForContent(query, contentType, detectedCategory as any),
+      15_000,
     );
-
-    // Get all available sources for this category
-    const categoryKey = detectedCategory || contentType;
-    const availableSources = getProvidersByCategory(categoryKey as any).map(
-      (p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        language: p.language,
-        capabilities: p.capabilities,
-        priority: p.priority,
-      }),
+    const providers = getProvidersByCategory(
+      (detectedCategory || contentType) as any,
     );
-
-    const result: SearchResult = {
+    return res.status(200).json({
       query,
       bestSource: {
-        provider: {
-          id: selection.provider.id,
-          name: selection.provider.name,
-          description: selection.provider.description,
-          language: selection.provider.language,
-          capabilities: selection.provider.capabilities,
-        },
+        provider: selection.provider,
         latency: selection.latency,
       },
-      availableSources,
+      availableSources: providers,
       categoryDetected: detectedCategory || contentType,
       totalProviders: ALL_PROVIDERS.length,
-    };
-
-    res.status(200).json(result);
-  } catch (error: any) {
-    console.error("AI Search error:", error?.message);
-    res.status(500).json({
-      error: "Failed to process search. Please try again.",
     });
+  } catch {
+    return res
+      .status(502)
+      .json({ error: "Provider search is temporarily unavailable" });
   }
 }

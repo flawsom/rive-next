@@ -18,20 +18,30 @@ export default function App({ Component, pageProps }: any) {
   //   template: '<div class="bar" role="bar"><div class="peg"></div></div>'
   // });
   useEffect(() => {
-    Router.events.on("routeChangeStart", (url) => {
+    const handleRouteChangeStart = (url: string) => {
       setIsLoading(true);
       NProgress.start();
-    });
+    };
 
-    Router.events.on("routeChangeComplete", (url) => {
+    const handleRouteChangeComplete = (url: string) => {
       setIsLoading(false);
       NProgress.done(false);
-    });
+    };
 
-    Router.events.on("routeChangeError", (url) => {
+    const handleRouteChangeError = () => {
       setIsLoading(false);
-    });
-  }, [Router]);
+    };
+
+    Router.events.on("routeChangeStart", handleRouteChangeStart);
+    Router.events.on("routeChangeComplete", handleRouteChangeComplete);
+    Router.events.on("routeChangeError", handleRouteChangeError);
+
+    return () => {
+      Router.events.off("routeChangeStart", handleRouteChangeStart);
+      Router.events.off("routeChangeComplete", handleRouteChangeComplete);
+      Router.events.off("routeChangeError", handleRouteChangeError);
+    };
+  }, []);
   return (
     <>
       <Head>

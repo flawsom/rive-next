@@ -46,6 +46,7 @@ export default async function axiosFetch({
     trendingTv: `${baseURL}?requestID=trendingTv&language=${language}&page=${page}`,
     trendingMovieDay: `${baseURL}?requestID=trendingMovieDay&language=${language}&page=${page}`,
     trendingTvDay: `${baseURL}?requestID=trendingTvDay&language=${language}&page=${page}`,
+    randomDiscovery: `${baseURL}?requestID=random&language=${language}&_=${Date.now()}`, // cache-busted so every tap is a new pick
     searchMulti: `${baseURL}?requestID=searchMulti&query=${query}&language=${language}&page=${page}`,
     searchKeyword: `${baseURL}?requestID=searchKeyword&query=${query}&language=${language}&page=${page}`,
     searchMovie: `${baseURL}?requestID=searchMovie&query=${query}&language=${language}&page=${page}`,

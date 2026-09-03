@@ -1,4 +1,49 @@
 import OpenAI from "openai";
+import axiosFetch from "./fetch"; // server-side util — builds real TMDB URLs (the client util would yield relative /api paths)
+import {
+  ALL_PROVIDERS,
+  getProvidersByCategory,
+  PHISHER_PROVIDERS,
+  CSX_PROVIDERS,
+} from "./providers";
+
+/**
+ * AI gateway configuration.
+ *
+ * Rive talks to an OpenAI-compatible gateway instead of OpenAI directly.
+ * Defaults point at the operator's gateway; both values are overridable via
+ * environment (Settings → Environment):
+ *   OPENAI_BASE_URL  — gateway base (default: https://kiraai.vn/api/v1)
+ *   OPENAI_API_KEY   — gateway API key
+ *   AI_MODEL         — preferred model (default: mimo-v2.5, the cheapest
+ *                      reliable model on this gateway — clean token usage,
+ *                      "runs forever" economics with solid quality)
+ *
+ * Freshness/internet: LLMs on a plain gateway have no live browsing, so Rive
+ * grounds the assistant with live TMDB data (trending injected into prompts,
+ * AI-suggested titles verified against TMDB before display). TMDB is the
+ * freshness source; the model reasons over it.
+ */
+const GATEWAY_BASE = process.env.OPENAI_BASE_URL || "https://kiraai.vn/api/v1";
+
+/**
+ * Ordered model chain: cheapest reliable first, auto-fallback on outage/quota.
+ * - mimo-v2.5: free-tier workhorse — reliable content, clean token usage
+ * - hy3: free-tier backup (reasoning model; slower, deeper)
+ * - qwen3.8-flash / glm-5.3-flash: preferred cheap models; auto-activates once
+ *   the gateway wallet is topped up (they currently need VND balance)
+ * - deepseek-v4-flash: requested flagship tier, activates if enabled on the key
+ */
+const MODEL_CHAIN = [
+  process.env.AI_MODEL || "mimo-v2.5",
+  "hy3",
+  "qwen3.8-flash",
+  "glm-5.3-flash",
+  "deepseek-v4-flash",
+];
+
+/** Last model that answered successfully — tried first on subsequent calls. */
+let preferredModel: string | null = null;
 
 let openaiClient: OpenAI | null = null;
 
@@ -6,12 +51,193 @@ export function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
     openaiClient = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
+      baseURL: GATEWAY_BASE,
     });
   }
   return openaiClient;
 }
 
-// System prompt for the AI movie/show assistant
+/** True when any gateway credential is present (used for graceful gating). */
+export function isAiConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+/**
+ * Single chat completion through the gateway with automatic model fallback.
+ * Falls through the chain on 4xx/5xx/timeouts so transient gateway outages
+ * on one model degrade to the next instead of failing the request.
+ */
+async function chatComplete(options: {
+  messages: { role: "system" | "user" | "assistant"; content: string }[];
+  maxTokens: number;
+  temperature: number;
+}): Promise<string> {
+  const openai = getOpenAIClient();
+  const chain = preferredModel
+    ? [preferredModel, ...MODEL_CHAIN.filter((m) => m !== preferredModel)]
+    : MODEL_CHAIN;
+
+  let lastError: unknown = null;
+  for (const model of chain) {
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        messages: options.messages,
+        max_tokens: options.maxTokens,
+        temperature: options.temperature,
+      });
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        preferredModel = model;
+        return content;
+      }
+      lastError = new Error("Empty completion");
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error("All gateway models failed");
+}
+
+// Build dynamic provider context for the system prompt
+function buildProviderContext(): string {
+  const movieTvProviders = getProvidersByCategory("movie")
+    .filter(
+      (p) => !p.categories.includes("live") && !p.categories.includes("music"),
+    )
+    .map(
+      (p) => `
+  - ${p.name} (${p.id}): ${p.description} | Lang: ${p.language.toUpperCase()} | ${p.repoSource.toUpperCase()} | ${p.capabilities.hq ? "HD" : "SD"} ${p.capabilities.subtitle ? "SUB" : ""} ${p.capabilities.dub ? "DUB" : ""} ${p.capabilities.dubbedHindi ? "Hindi Dub" : ""} | Categories: ${p.categories.join(", ")} | Priority: ${p.priority}`,
+    )
+    .join("");
+
+  const animeProviders = getProvidersByCategory("anime")
+    .map(
+      (p) => `
+  - ${p.name} (${p.id}): ${p.description} | Lang: ${p.language.toUpperCase()} | ${p.repoSource.toUpperCase()} | ${p.capabilities.hq ? "HD" : "SD"} ${p.capabilities.subtitle ? "SUB" : ""} ${p.capabilities.dub ? "DUB" : ""} ${p.capabilities.dubbedHindi ? "Hindi Dub" : ""}`,
+    )
+    .join("");
+
+  const langCount = new Map<string, number>();
+  ALL_PROVIDERS.forEach((p) => {
+    langCount.set(p.language, (langCount.get(p.language) || 0) + 1);
+  });
+  const langSummary = Array.from(langCount.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([lang, count]) => `${lang}(${count})`)
+    .join(", ");
+
+  return `
+
+## Streaming Sources Available on Rive (${ALL_PROVIDERS.length} total sources)
+
+Rive has ${ALL_PROVIDERS.length} streaming sources from two repositories:
+- Phisher Repo (${PHISHER_PROVIDERS.length} sources): Primary repo with HDHub4U, 4KHDHub, StreamPlay, and ${getProvidersByCategory("anime").length}+ anime sources
+- CSX Repo (${CSX_PROVIDERS.length} sources): Secondary repo with MoviesDrive, Bollyflix, CineStream, VegaMovies
+
+Default sources: HDHub4U and MoviesDrive (auto-selected based on latency)
+Languages supported: ${langSummary}
+
+### Movies & TV Sources (${movieTvProviders.length} sources)
+${movieTvProviders}
+
+### Anime & Cartoon Sources (${animeProviders.length} sources)
+${animeProviders}
+
+### Source Recommendation Guidelines
+- For Hindi/Bollywood content: Recommend HDHub4U, MoviesDrive, MovieBox, MultiMovies, DesiCinemas
+- For English/Hollywood: Recommend HDHub4U, 4KHDHub, StreamPlay, CineStream, Goojara
+- For Anime: Recommend Anichi, AnimePahe, KickassAnime, AnimeDekho (Hindi dub)
+- For K-Drama/Asian: Recommend KissKh, MPlayer, OneTouchTV, ShowBox
+- For 4K content: Recommend 4K HDHub specifically
+- For cartoons (Hindi): Recommend DoraBash, Kartoons, PirateXPlay, AnimeSalt
+- The system auto-switches sources if one fails - always mention this to users
+`;
+}
+
+/**
+ * Live TMDB context injected into prompts so the model always reasons over
+ * what is actually current (trending right now) instead of stale training
+ * data. Fetched server-side via the platform's TMDB proxy util; fails soft.
+ */
+async function buildTmdbFreshnessContext(): Promise<string> {
+  // Short cache: trending data changes by the day, not by the minute —
+  // this keeps chat snappy without hammering TMDB on every message.
+  if (freshnessCache && Date.now() - freshnessCache.at < 5 * 60_000) {
+    return freshnessCache.value;
+  }
+  try {
+    const [movies, tv] = await Promise.all([
+      axiosFetch({ requestID: "trendingMovieDay" }),
+      axiosFetch({ requestID: "trendingTvDay" }),
+    ]);
+    const fmt = (list: any) =>
+      (Array.isArray(list?.results) ? list.results : [])
+        .slice(0, 10)
+        .map(
+          (r: any) =>
+            `"${r.title || r.name}" (${(r.release_date || r.first_air_date || "").slice(0, 4)})`,
+        )
+        .join(", ");
+    const movieLine = fmt(movies);
+    const tvLine = fmt(tv);
+    const value =
+      !movieLine && !tvLine
+        ? ""
+        : `
+
+## Currently Trending on TMDB (live, today)
+- Trending movies: ${movieLine || "unavailable"}
+- Trending TV: ${tvLine || "unavailable"}
+
+Use this list to stay current. When users ask what's new or popular, prefer these titles. For any specific title question, you may assume the platform can search TMDB for accurate metadata — do not claim a title is unavailable just because it is recent.`;
+    freshnessCache = { value, at: Date.now() };
+    return value;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * TMDB search used to ground AI suggestions in real, discoverable titles.
+ * Returns the matched TMDB entry or null when the title does not exist.
+ */
+async function tmdbVerifyTitle(
+  title: string,
+): Promise<{
+  id: number;
+  name: string;
+  year: string;
+  type: "movie" | "tv";
+  posterPath: string | null;
+} | null> {
+  try {
+    const res: any = await axiosFetch({
+      requestID: "searchMulti",
+      query: title,
+    });
+    const hit = (Array.isArray(res?.results) ? res.results : []).find(
+      (r: any) =>
+        (r.title || r.name || "")
+          .toLowerCase()
+          .includes(title.toLowerCase().slice(0, 30)),
+    );
+    if (!hit) return null;
+    return {
+      id: hit.id,
+      name: hit.title || hit.name,
+      year: (hit.release_date || hit.first_air_date || "").slice(0, 4),
+      type: hit.media_type === "tv" || hit.first_air_date ? "tv" : "movie",
+      posterPath: hit.poster_path || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+let freshnessCache: { value: string; at: number } | null = null;
+
+// System prompt for the AI movie/show assistant (provider-aware)
 export const SYSTEM_PROMPT = `You are Rive AI, a knowledgeable and enthusiastic movie and TV show assistant for the Rive streaming platform. You help users discover content, provide recommendations, answer questions about movies and TV shows, and offer personalized suggestions.
 
 Your capabilities:
@@ -21,46 +247,120 @@ Your capabilities:
 - Help users find content by mood, genre, language, or theme
 - Answer trivia and questions about films and TV series
 - Provide "if you liked X, try Y" recommendations
+- Recommend the BEST streaming source for specific content (you have access to the full source registry)
+- Help users find content in specific languages (Hindi, Tamil, Telugu, English, Korean, Japanese, etc.)
+- Suggest anime sources and cartoon sources when asked about animated content
+- Advise on source quality (HD, 4K, SUB, DUB availability)
 
 Guidelines:
 - Be conversational, friendly, and enthusiastic about cinema
-- When recommending, provide brief explanations of why someone might enjoy it
+- When recommending content, suggest which source would be best for it
+- When users ask about sources, explain the available options with their capabilities
 - Include genre, year, and key details in recommendations
 - If unsure about something, say so honestly
 - Keep responses concise but informative (2-4 paragraphs max unless asked for detail)
 - Use markdown formatting for readability (bold titles, bullet points for lists)
 - When users describe a mood or feeling, match content to that vibe
-- For Indian content requests, suggest from Bollywood, Tollywood, Kollywood, and regional cinema
-- Support multilingual content suggestions (Hindi, Tamil, Telugu, English, Korean, Japanese, etc.)
+- For Indian content, suggest Hindi sources like HDHub4U, MoviesDrive, DesiCinemas
+- For international content, suggest the best matching source
+- For anime, recommend from the dedicated anime sources
+- Always mention that Rive auto-switches sources if one fails
+- Support multilingual content suggestions (Hindi, Tamil, Telugu, English, Korean, Japanese, Bengali, etc.)
 `;
+
+// Get dynamic system prompt with provider context + live TMDB freshness
+export async function getFullSystemPrompt(): Promise<string> {
+  const [providerContext, freshness] = await Promise.all([
+    Promise.resolve(buildProviderContext()),
+    buildTmdbFreshnessContext(),
+  ]);
+  return SYSTEM_PROMPT + providerContext + freshness;
+}
 
 // Generate AI chat response
 export async function generateChatResponse(
   messages: { role: "user" | "assistant" | "system"; content: string }[],
   context?: string,
 ): Promise<string> {
-  const openai = getOpenAIClient();
-
   const systemMessage = {
     role: "system" as const,
     content:
-      SYSTEM_PROMPT +
+      (await getFullSystemPrompt()) +
       (context
         ? `\n\nAdditional context about the user's viewing history:\n${context}`
         : ""),
   };
 
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+  return await chatComplete({
     messages: [systemMessage, ...messages],
-    max_tokens: 1024,
+    maxTokens: 2400, // reasoning models emit hidden thinking tokens first
     temperature: 0.7,
   });
+}
 
-  return (
-    response.choices[0]?.message?.content ||
-    "I couldn't generate a response. Please try again."
-  );
+/**
+ * Personalize one-line reasons for algorithmically selected recommendations.
+ * The LLM never invents titles here — TMDB already provided them — it only
+ * writes the "why you'd like this" line. Returns true when any reason was
+ * upgraded; false means callers keep their algorithmic reasons.
+ */
+export async function polishRecommendationReasons(
+  items: {
+    title: string;
+    type: string;
+    overview?: string;
+    reason: string;
+    rating?: number;
+    year?: number;
+  }[],
+  context?: { searchTerms?: string[] },
+): Promise<boolean> {
+  if (!items.length) return false;
+  const list = items
+    .slice(0, 18)
+    .map(
+      (r, i) =>
+        `${i}. "${r.title}" (${r.type}${r.year ? `, ${r.year}` : ""}${r.rating ? `, ★${r.rating.toFixed(1)}` : ""}) — current reason: ${r.reason}`,
+    )
+    .join("\n");
+
+  const prompt = `Rewrite the recommendation reason for each title below as ONE short personal line (max 12 words) explaining why THIS user would enjoy it, given their searches: ${(context?.searchTerms || []).join(", ") || "(none)"}.
+
+${list}
+
+Respond with ONLY a JSON array: [{"i":0,"reason":"..."},{"i":1,"reason":"..."}] — same indices, no markdown.`;
+
+  try {
+    const content = await chatComplete({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You write concise personal recommendation reasons for a streaming app. Respond with valid JSON only.",
+        },
+        { role: "user", content: prompt },
+      ],
+      maxTokens: 1600, // reasoning models emit hidden thinking tokens first
+      temperature: 0.7,
+    });
+    const jsonStr = content
+      .replace(/```json?\n?/g, "")
+      .replace(/```/g, "")
+      .trim();
+    const parsed = JSON.parse(jsonStr);
+    let upgraded = false;
+    for (const entry of Array.isArray(parsed) ? parsed : []) {
+      const idx = Number(entry?.i);
+      const reason = String(entry?.reason || "").slice(0, 140);
+      if (Number.isInteger(idx) && items[idx] && reason) {
+        items[idx].reason = reason;
+        upgraded = true;
+      }
+    }
+    return upgraded;
+  } catch {
+    return false;
+  }
 }
 
 // Generate content insights for a movie/show
@@ -78,8 +378,6 @@ export async function generateContentInsights(data: {
   moodMatch: string[];
   similarVibes: string[];
 }> {
-  const openai = getOpenAIClient();
-
   const prompt = `Generate engaging insights for this ${data.type === "movie" ? "movie" : "TV show"}:
 
 Title: ${data.title}
@@ -100,8 +398,7 @@ Provide a JSON response with these fields:
 Return ONLY valid JSON, no markdown formatting.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const content = await chatComplete({
       messages: [
         {
           role: "system",
@@ -110,12 +407,10 @@ Return ONLY valid JSON, no markdown formatting.`;
         },
         { role: "user", content: prompt },
       ],
-      max_tokens: 512,
+      maxTokens: 1600, // reasoning models emit hidden thinking tokens first
       temperature: 0.7,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
-    // Try to parse JSON, handle potential markdown code blocks
     const jsonStr = content
       .replace(/```json?\n?/g, "")
       .replace(/```/g, "")
@@ -131,18 +426,28 @@ Return ONLY valid JSON, no markdown formatting.`;
   }
 }
 
-// Generate smart recommendations based on viewing history
+/**
+ * Generate smart recommendations based on viewing history.
+ * AI-suggested titles are verified against TMDB (algorithmic grounding):
+ * only real, discoverable titles are returned, enriched with TMDB ids,
+ * posters and years so the UI can deep-link straight to detail pages.
+ */
 export async function generateRecommendations(viewingHistory: {
   recentlyWatched: { title: string; type: string; genres: string[] }[];
   favoriteGenres: string[];
   preferences?: string;
 }): Promise<{
-  recommendations: { title: string; reason: string; type: string }[];
+  recommendations: {
+    title: string;
+    reason: string;
+    type: string;
+    id?: number;
+    year?: string;
+    posterPath?: string | null;
+  }[];
   moodSuggestion: string;
 }> {
-  const openai = getOpenAIClient();
-
-  const prompt = `Based on this viewing profile, generate 6 personalized content recommendations:
+  const prompt = `Based on this viewing profile, generate 8 personalized content recommendations:
 
 Recently Watched:
 ${viewingHistory.recentlyWatched.map((w) => `- "${w.title}" (${w.type}, genres: ${w.genres.join(", ")})`).join("\n")}
@@ -151,14 +456,13 @@ Favorite Genres: ${viewingHistory.favoriteGenres.join(", ")}
 ${viewingHistory.preferences ? `User Preferences: ${viewingHistory.preferences}` : ""}
 
 Provide a JSON response with:
-- recommendations: Array of 6 objects with {title, reason (1 sentence why they'd like it), type ("movie" or "tv")}
+- recommendations: Array of 8 objects with {title, reason (1 sentence why they'd like it), type ("movie" or "tv")}
 - moodSuggestion: A short sentence suggesting what mood/vibe to explore next
 
-Return ONLY valid JSON, no markdown.`;
+Prefer titles that actually exist (real films/series, any era). Return ONLY valid JSON, no markdown.`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const content = await chatComplete({
       messages: [
         {
           role: "system",
@@ -167,16 +471,44 @@ Return ONLY valid JSON, no markdown.`;
         },
         { role: "user", content: prompt },
       ],
-      max_tokens: 800,
+      maxTokens: 2400, // reasoning models emit hidden thinking tokens first
       temperature: 0.8,
     });
 
-    const content = response.choices[0]?.message?.content || "{}";
     const jsonStr = content
       .replace(/```json?\n?/g, "")
       .replace(/```/g, "")
       .trim();
-    return JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr);
+
+    // Ground each suggestion against TMDB — keep only verifiable titles,
+    // enriched with real ids/posters/years (max 6 kept from 8 candidates).
+    const candidates: any[] = Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.slice(0, 8)
+      : [];
+    const verified = await Promise.all(
+      candidates.map(async (rec) => {
+        const title = String(rec?.title || "").slice(0, 200);
+        if (!title) return null;
+        const tmdb = await tmdbVerifyTitle(title);
+        if (!tmdb) return null;
+        return {
+          title: tmdb.name,
+          reason: String(rec?.reason || "").slice(0, 300),
+          type: tmdb.type,
+          id: tmdb.id,
+          year: tmdb.year,
+          posterPath: tmdb.posterPath,
+        };
+      }),
+    );
+
+    return {
+      recommendations: verified.filter(Boolean).slice(0, 6) as any[],
+      moodSuggestion:
+        String(parsed.moodSuggestion || "").slice(0, 300) ||
+        "Explore something new today!",
+    };
   } catch {
     return {
       recommendations: [],

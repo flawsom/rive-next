@@ -35,12 +35,33 @@ import {
   MdOutlineTheaterComedy,
 } from "react-icons/md";
 import { RiEye2Line, RiEye2Fill } from "react-icons/ri";
-import { BsStars, BsStar } from "react-icons/bs";
-import { usePathname, useSearchParams } from "next/navigation";
+import { BsStars, BsStar, BsCollectionPlay, BsShuffle } from "react-icons/bs";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 
 const Navbar = ({ children }: any) => {
   const path = usePathname();
   const params = useSearchParams();
+  const router = useRouter();
+  const [surprising, setSurprising] = useState(false);
+
+  // Surprise Me: instantly jump to a random title across movies and shows.
+  const surpriseMe = async () => {
+    if (surprising) return;
+    setSurprising(true);
+    try {
+      const response = await fetch(
+        `/api/backendfetch?requestID=random&_=${Date.now()}`,
+      );
+      const data = await response.json();
+      if (data?.result?.id) {
+        router.push(`/detail?type=${data.result.type}&id=${data.result.id}`);
+      }
+    } catch {
+      // Silently ignore; the button simply does nothing on failure.
+    } finally {
+      setSurprising(false);
+    }
+  };
   // const query=
   const [pathname, setPathname] = useState(path);
   useEffect(() => {
@@ -152,6 +173,39 @@ const Navbar = ({ children }: any) => {
           <IoLibraryOutline className={styles.inactive} />
         )}
       </Link>
+      <Link
+        href="/sources"
+        aria-label="Sources"
+        data-tooltip-id="tooltip"
+        data-tooltip-content="Sources"
+        className={styles.mobileHide}
+      >
+        {pathname === "/sources" ? (
+          <BsCollectionPlay className={styles.active} />
+        ) : (
+          <BsCollectionPlay className={styles.inactive} />
+        )}
+      </Link>
+      <button
+        onClick={surpriseMe}
+        aria-label="Surprise Me"
+        data-tooltip-id="tooltip"
+        data-tooltip-content="Surprise Me — jump to a random title"
+        className={styles.mobileHide}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: surprising ? "wait" : "pointer",
+          padding: 0,
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
+        <BsShuffle
+          className={surprising ? styles.inactive : styles.inactive}
+          style={{ opacity: surprising ? 0.4 : 1 }}
+        />
+      </button>
       <Link
         href="/ai"
         aria-label="AI Assistant"

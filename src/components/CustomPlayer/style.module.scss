@@ -1,0 +1,247 @@
+.player {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  overflow: hidden;
+  cursor: default;
+
+  .video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 3;
+
+    .spinnerRing {
+      width: 3.5rem;
+      height: 3.5rem;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-top-color: var(--ascent-color);
+      animation: spin 0.9s linear infinite;
+    }
+  }
+
+  .bigPlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 5rem;
+    filter: drop-shadow(0 6px 24px rgba(0, 0, 0, 0.6));
+    transition:
+      transform 0.15s ease,
+      opacity 0.2s ease;
+
+    &:hover {
+      transform: scale(1.08);
+    }
+  }
+
+  .titleBar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 4;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+    color: #fff;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+
+    &.hiddenBar {
+      opacity: 0;
+    }
+  }
+
+  .controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 4;
+    padding: 0.8rem 1.2rem 1rem;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.82), transparent);
+    animation: controlsIn 0.2s ease;
+  }
+
+  .seekRow {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+
+    .seek {
+      flex: 1;
+      appearance: none;
+      height: 0.3rem;
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.25);
+      outline: none;
+      cursor: pointer;
+
+      &::-webkit-slider-thumb {
+        appearance: none;
+        width: 0.85rem;
+        height: 0.85rem;
+        border-radius: 50%;
+        background: var(--ascent-color);
+        border: none;
+      }
+
+      &::-moz-range-thumb {
+        width: 0.85rem;
+        height: 0.85rem;
+        border-radius: 50%;
+        background: var(--ascent-color);
+        border: none;
+      }
+    }
+
+    .time {
+      color: #fff;
+      font-size: 0.75rem;
+      font-family: sans-serif;
+      min-width: 6.5rem;
+      text-align: right;
+      letter-spacing: 0;
+    }
+  }
+
+  .buttonRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+
+    .iconBtn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.3rem;
+      border-radius: 0.4rem;
+      cursor: pointer;
+      opacity: 0.9;
+
+      &:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.12);
+      }
+    }
+
+    .volume {
+      width: 4.5rem;
+      appearance: none;
+      height: 0.25rem;
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.25);
+      outline: none;
+      cursor: pointer;
+
+      &::-webkit-slider-thumb {
+        appearance: none;
+        width: 0.7rem;
+        height: 0.7rem;
+        border-radius: 50%;
+        background: #fff;
+        border: none;
+      }
+    }
+
+    .menuWrap {
+      position: relative;
+
+      .menu {
+        position: absolute;
+        bottom: 2.6rem;
+        left: 0;
+        min-width: 8.5rem;
+        max-height: 16rem;
+        overflow-y: auto;
+        background: rgba(15, 15, 15, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 0.6rem;
+        padding: 0.35rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+
+        button {
+          background: none;
+          border: none;
+          color: #ddd;
+          font-size: 0.78rem;
+          font-family: sans-serif;
+          padding: 0.4rem 0.8rem;
+          border-radius: 0.35rem;
+          text-align: left;
+          cursor: pointer;
+
+          &:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+          }
+        }
+
+        .menuActive {
+          color: var(--ascent-color) !important;
+          font-weight: 700;
+        }
+
+        .menuUpload {
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 0 !important;
+          margin-top: 0.25rem;
+          padding-top: 0.5rem !important;
+          color: var(--ascent-color);
+        }
+
+        .menuEmpty {
+          color: #888;
+          font-size: 0.72rem;
+          font-family: sans-serif;
+          padding: 0.4rem 0.8rem;
+        }
+      }
+    }
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes controlsIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

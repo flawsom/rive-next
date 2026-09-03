@@ -53,11 +53,17 @@ The app uses a clean single-source architecture.
 > movie and TV show URLs using: `${STREAM_URL}/movie/{id}` and  
 > `${STREAM_URL}/tv/{id}/{season}/{episode}`
 
-## 4. AI Integration (OpenAI)
+## 4. AI Integration (OpenAI-compatible gateway)
 
 ```.env
 OPENAI_API_KEY=
+OPENAI_BASE_URL=https://kiraai.vn/api/v1
+AI_MODEL=mimo-v2.5
 ```
+
+Any OpenAI-compatible gateway works — Rive does not call OpenAI directly.
+`AI_MODEL` picks the preferred model; a fallback chain automatically tries
+other gateway models on quota/outage errors.
 
 This powers the AI features including:
 
@@ -65,17 +71,11 @@ This powers the AI features including:
 - **AI Content Insights** — personalized insights on detail pages
 - **AI-Powered Search** — enhanced content discovery
 
-Steps to get the OpenAI API Key:
-
-- Go to [OpenAI Platform](https://platform.openai.com/)
-- Sign up or log in
-- Navigate to API Keys section
-- Create a new secret key
-- Copy the key into your `.env` file
-
 > [!NOTE]
 > The AI features will gracefully degrade if no API key is provided.  
 > The chat will show an error message, and content insights will be hidden.
+> Freshness comes from live TMDB data injected into prompts — no gateway
+> needs native web browsing.
 
 ## **Disclaimer**
 

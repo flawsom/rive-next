@@ -13,111 +13,128 @@ import {
   recordSuccess,
   resetHealth,
 } from "@/Utils/sourceSelector";
+import { setPrivateApiHeaders } from "@/Utils/apiValidation";
+
+const READ_ACTIONS = new Set([
+  "list",
+  "search",
+  "best",
+  "bestForContent",
+  "health",
+  "detail",
+]);
+const WRITE_ACTIONS = new Set(["reportFailure", "reportSuccess", "reset"]);
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
-  const { action, category, type, title, query, providerId } = req.query;
+  setPrivateApiHeaders(res);
+  const action = typeof req.query.action === "string" ? req.query.action : "";
+  if (READ_ACTIONS.has(action) && req.method !== "GET") {
+    res.setHeader("Allow", "GET");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+  if (WRITE_ACTIONS.has(action) && req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+  if (!READ_ACTIONS.has(action) && !WRITE_ACTIONS.has(action))
+    return res.status(400).json({ error: `Unknown action: ${action}` });
+
+  const category =
+    typeof req.query.category === "string" ? req.query.category : undefined;
+  const queryProviderId =
+    typeof req.query.providerId === "string" ? req.query.providerId : undefined;
+  const bodyProviderId =
+    typeof req.body?.providerId === "string" ? req.body.providerId : undefined;
+  const providerId = bodyProviderId || queryProviderId;
 
   try {
     switch (action) {
-      case "list": {
-        const cat = category as any;
-        if (cat) {
-          return res.status(200).json(getProvidersByCategory(cat));
-        }
-        return res.status(200).json(ALL_PROVIDERS);
-      }
-
+      case "list":
+        return res
+          .status(200)
+          .json(
+            category ? getProvidersByCategory(category as any) : ALL_PROVIDERS,
+          );
       case "search": {
-        const q = query as string;
-        if (!q) {
+        const query =
+          typeof req.query.query === "string"
+            ? req.query.query.trim().slice(0, 100)
+            : "";
+        if (!query)
           return res.status(400).json({ error: "query parameter is required" });
-        }
-        return res.status(200).json(searchProviders(q));
+        return res.status(200).json(searchProviders(query));
       }
-
-      case "best": {
-        const cat = category as any;
-        if (!cat) {
+      case "best":
+        if (!category)
           return res
             .status(400)
             .json({ error: "category parameter is required" });
-        }
-        const preferredId = providerId as string | undefined;
-        const selection = await selectBestSource(cat, preferredId);
-        return res.status(200).json(selection);
-      }
-
+        return res
+          .status(200)
+          .json(await selectBestSource(category as any, queryProviderId));
       case "bestForContent": {
-        const contentTitle = title as string;
-        const contentType = (type as "movie" | "tv") || "movie";
-        if (!contentTitle) {
+        const title =
+          typeof req.query.title === "string"
+            ? req.query.title.trim().slice(0, 200)
+            : "";
+        if (!title)
           return res.status(400).json({ error: "title parameter is required" });
-        }
-        const contentCategory = category as
-          "anime" | "cartoon" | "asianDrama" | undefined;
-        const selection = await selectBestSourceForContent(
-          contentTitle,
-          contentType,
-          contentCategory,
-        );
-        return res.status(200).json(selection);
+        return res
+          .status(200)
+          .json(
+            await selectBestSourceForContent(
+              title,
+              req.query.type === "tv" ? "tv" : "movie",
+              category as any,
+            ),
+          );
       }
-
-      case "health": {
+      case "health":
         return res.status(200).json(getHealthStatus());
-      }
-
-      case "reportFailure": {
-        const pid = providerId as string;
-        if (!pid) {
+      case "reportFailure":
+        if (!providerId || !findProviderById(providerId))
           return res
             .status(400)
-            .json({ error: "providerId parameter is required" });
-        }
-        recordFailure(pid);
+            .json({ error: "Valid providerId is required" });
+        recordFailure(providerId);
         return res.status(200).json({ success: true });
-      }
-
       case "reportSuccess": {
-        const pid = providerId as string;
-        const latency = Number(req.query.latency) || 0;
-        if (!pid) {
+        const latency = Number(req.body?.latency ?? req.query.latency);
+        if (
+          !providerId ||
+          !findProviderById(providerId) ||
+          !Number.isFinite(latency) ||
+          latency < 0 ||
+          latency > 120_000
+        )
           return res
             .status(400)
-            .json({ error: "providerId parameter is required" });
-        }
-        recordSuccess(pid, latency);
+            .json({ error: "Valid providerId and latency are required" });
+        recordSuccess(providerId, latency);
         return res.status(200).json({ success: true });
       }
-
-      case "reset": {
-        const pid = providerId as string | undefined;
-        resetHealth(pid);
+      case "reset":
+        resetHealth(providerId);
         return res.status(200).json({ success: true });
-      }
-
       case "detail": {
-        const pid = providerId as string;
-        if (!pid) {
+        if (!queryProviderId)
           return res
             .status(400)
             .json({ error: "providerId parameter is required" });
-        }
-        const provider = findProviderById(pid);
-        if (!provider) {
-          return res.status(404).json({ error: "Provider not found" });
-        }
-        return res.status(200).json(provider);
+        const provider = findProviderById(queryProviderId);
+        return provider
+          ? res.status(200).json(provider)
+          : res.status(404).json({ error: "Provider not found" });
       }
-
       default:
-        return res.status(400).json({ error: `Unknown action: ${action}` });
+        return res.status(400).json({ error: "Unsupported action" });
     }
-  } catch (error: any) {
-    console.error("Provider API error:", error?.message);
-    return res.status(500).json({ error: "Internal server error" });
+  } catch {
+    return res
+      .status(502)
+      .json({ error: "Provider service is temporarily unavailable" });
   }
 }

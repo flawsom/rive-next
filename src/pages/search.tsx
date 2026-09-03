@@ -6,7 +6,7 @@ import { AiFillLeftCircle, AiFillRightCircle } from "react-icons/ai";
 import MovieCardLarge from "@/components/MovieCardLarge";
 import Skeleton from "react-loading-skeleton";
 import NProgress from "nprogress";
-// import MoviePoster from '@/components/MoviePoster';
+import { recordSearch } from "@/Utils/searchHistory";
 
 const dummyList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const SearchPage = ({ categoryType }: any) => {
@@ -52,6 +52,7 @@ const SearchPage = ({ categoryType }: any) => {
   }, []);
   useEffect(() => {
     let debounceTimer: NodeJS.Timeout;
+    let historyTimer: NodeJS.Timeout;
     const fetchData = async (mode: any) => {
       setLoading(true);
       // setData([null, null, null, null, null, null, null, null, null, null]);
@@ -90,10 +91,19 @@ const SearchPage = ({ categoryType }: any) => {
           fetchData(true);
         }
       }, 150); // Ultra-fast instant search
+      // Search history records settled queries only (800ms), so typing
+      // doesn't pollute the recommendation signal.
+      clearTimeout(historyTimer);
+      historyTimer = setTimeout(() => {
+        if (query.length >= 2) recordSearch(query);
+      }, 800);
     };
     if (query?.length > 1) debounceSearch();
     if (query?.length === 0) fetchData(false);
-    return () => clearTimeout(debounceTimer);
+    return () => {
+      clearTimeout(debounceTimer);
+      clearTimeout(historyTimer);
+    };
   }, [query, currentPage]);
 
   useEffect(() => {

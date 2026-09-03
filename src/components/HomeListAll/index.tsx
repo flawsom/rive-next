@@ -4,6 +4,7 @@ import axiosFetch from "@/Utils/fetchBackend";
 import Link from "next/link";
 import Skeleton from "react-loading-skeleton";
 import MovieCardSmall from "../MovieCardSmall";
+import ContinueWatchingRow from "../ContinueWatchingRow";
 import { getContinueWatching } from "@/Utils/continueWatching";
 import { useInView } from "react-intersection-observer";
 
@@ -95,7 +96,7 @@ const HomeListAll = () => {
               if (i < 5) {
                 const res = await axiosFetch({
                   requestID: "tvRelated",
-                  id: ele,
+                  id: String(ele),
                 });
                 arr.push(res?.results);
                 i++;
@@ -105,7 +106,7 @@ const HomeListAll = () => {
               if (i < 10) {
                 const res = await axiosFetch({
                   requestID: "movieRelated",
-                  id: ele,
+                  id: String(ele),
                 });
                 arr.push(res?.results);
                 i++;
@@ -306,6 +307,7 @@ const HomeListAll = () => {
 
   return (
     <div className={styles.HomeListAll}>
+      <ContinueWatchingRow />
       {recommendations.length > 0 ? (
         <>
           <h1>Recommendation</h1>

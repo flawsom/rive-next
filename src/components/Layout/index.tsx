@@ -19,7 +19,6 @@ const Layout = ({ children }: any) => {
 
   const fetchRandomData = async () => {
     const res: any = await fetchRandom();
-    console.log({ res });
     if (res?.type && res?.id) {
       push(`/detail?type=${res.type}&id=${res.id}`);
     }
@@ -32,14 +31,13 @@ const Layout = ({ children }: any) => {
       setMode(values?.mode);
       setAscent_color(values?.ascent_color);
     }
-    console.log({ values });
     const prefersDarkMode =
       window.matchMedia &&
       window.matchMedia("(prefers-color-scheme: dark)").matches;
     const themeColor = prefersDarkMode ? "#1b1919" : "#f4f7fe";
     setThemeColor(themeColor);
 
-    window.addEventListener("keydown", (event) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key === "k") {
         event.preventDefault();
         push("/search");
@@ -48,7 +46,9 @@ const Layout = ({ children }: any) => {
         event.preventDefault();
         fetchRandomData();
       }
-    });
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
     // console.log({ prefersDarkMode });
     // const metaThemeColor = document.querySelector("meta[name=theme-color]");
     // metaThemeColor?.setAttribute("content", themeColor);

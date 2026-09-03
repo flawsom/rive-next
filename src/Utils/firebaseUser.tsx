@@ -17,11 +17,23 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   deleteDoc,
 } from "firebase/firestore";
 import { toast } from "sonner";
 
+// Firebase is optional at runtime: when the operator has not configured keys,
+// every cloud call fails fast with a clear message instead of crashing SSR.
+function ensureCloudConfigured(): void {
+  if (!auth || !db || !provider) {
+    throw new Error(
+      "Cloud sync is not configured. Add Firebase keys in Settings → Environment.",
+    );
+  }
+}
+
 export const signupUserManual = async ({ username, email, password }: any) => {
+  ensureCloudConfigured();
   const isEmailCorrect = /\S+@\S+\.\S+/.test(email);
   if (!username || !email || !password) {
     // toast.dismiss(loadingToast);
@@ -37,12 +49,12 @@ export const signupUserManual = async ({ username, email, password }: any) => {
       const loadingToast = toast.loading("Connecting to cloud provider...");
       try {
         const userCred = await createUserWithEmailAndPassword(
-          auth,
+          auth!,
           email,
           password,
         );
         const user = userCred.user;
-        const colRef = doc(db, "users", user.uid);
+        const colRef = doc(db!, "users", user.uid);
         await setDoc(colRef, { username: username });
         toast.dismiss(loadingToast);
         toast.success("Cloud: User created! Welcome to Rive club");
@@ -64,6 +76,7 @@ export const signupUserManual = async ({ username, email, password }: any) => {
 };
 
 export const loginUserManual = async ({ email, password }: any) => {
+  ensureCloudConfigured();
   const isEmailCorrect = /\S+@\S+\.\S+/.test(email);
 
   const loadingToast = toast.loading("Connecting to cloud provider...");
@@ -80,7 +93,7 @@ export const loginUserManual = async ({ email, password }: any) => {
         toast.error("Cloud: Enter valid Email");
         return false;
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(auth!, email, password);
         toast.dismiss(loadingToast);
         toast.success("Cloud: welcome back");
         return true;
@@ -104,9 +117,10 @@ export const loginUserManual = async ({ email, password }: any) => {
   }
 };
 export const loginUserGoogle = async () => {
+  ensureCloudConfigured();
   const loadingToast = toast.loading("Connecting to cloud provider...");
   try {
-    const result = await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(auth!, provider!);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     const token = credential?.accessToken;
     const user = result?.user;
@@ -121,8 +135,9 @@ export const loginUserGoogle = async () => {
 };
 
 export const logoutUser = () => {
+  ensureCloudConfigured();
   const loadingToast = toast.loading("Connecting to cloud provider...");
-  signOut(auth)
+  signOut(auth!)
     .then(() => {
       // toast("Now using browser's storage");
       toast.dismiss(loadingToast);
@@ -152,10 +167,14 @@ export const logoutUser = () => {
 // };
 
 export const fetchFbWatchlist = async ({ userID = null }: any) => {
+  ensureCloudConfigured();
   const loadingToast = toast.loading("Connecting to cloud provider...");
   const userWatchlist: any = { movie: [], tv: [] };
   try {
-    const q = query(collection(db, "watchlist"), where("userID", "==", userID));
+    const q = query(
+      collection(db!, "watchlist"),
+      where("userID", "==", userID),
+    );
     const querySnapshot = await getDocs(q);
 
     querySnapshot.forEach((doc) => {
@@ -178,9 +197,13 @@ export const removeFromFbWatchlist = async ({
   type,
   id,
 }: any) => {
+  ensureCloudConfigured();
   const loadingToast = toast.loading("Connecting to cloud provider...");
   try {
-    const q = query(collection(db, "watchlist"), where("userID", "==", userID));
+    const q = query(
+      collection(db!, "watchlist"),
+      where("userID", "==", userID),
+    );
     const querySnapshot = await getDocs(q);
 
     querySnapshot.forEach(async (doc) => {
@@ -201,8 +224,12 @@ export const removeFromFbWatchlist = async ({
   }
 };
 export const checkInFbWatchlist = async ({ userID = null, type, id }: any) => {
+  ensureCloudConfigured();
   try {
-    const q = query(collection(db, "watchlist"), where("userID", "==", userID));
+    const q = query(
+      collection(db!, "watchlist"),
+      where("userID", "==", userID),
+    );
     const querySnapshot = await getDocs(q);
 
     for (const doc of querySnapshot.docs) {
@@ -217,7 +244,32 @@ export const checkInFbWatchlist = async ({ userID = null, type, id }: any) => {
   }
   return false;
 };
+export const fetchFbHistory = async (userID: string) => {
+  ensureCloudConfigured();
+  try {
+    const ref = doc(db!, "history", userID);
+    const snapshot = await getDoc(ref);
+    if (snapshot.exists() && Array.isArray(snapshot.data().entries)) {
+      return snapshot.data().entries as any[];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const pushFbHistory = async (userID: string, entries: any[]) => {
+  ensureCloudConfigured();
+  if (!Array.isArray(entries)) return;
+  try {
+    await setDoc(doc(db!, "history", userID), { entries }, { merge: true });
+  } catch {
+    // Fire-and-forget; next session retries.
+  }
+};
+
 export const addToFbWatchlist = async ({ userID = null, type, id }: any) => {
+  ensureCloudConfigured();
   if (userID === null) {
     // toast.dismiss(loadingToast);
     toast.error("Error updating watchlist");
@@ -227,7 +279,7 @@ export const addToFbWatchlist = async ({ userID = null, type, id }: any) => {
   } else {
     const loadingToast = toast.loading("Connecting to cloud provider...");
     try {
-      const docRef = await addDoc(collection(db, "watchlist"), {
+      const docRef = await addDoc(collection(db!, "watchlist"), {
         type,
         id,
         userID,

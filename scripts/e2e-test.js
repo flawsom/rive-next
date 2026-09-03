@@ -6,6 +6,15 @@
 
 const BASE_URL = "http://localhost:3000";
 
+// State-changing endpoints require POST with a JSON body.
+async function postJson(path, body) {
+  return fetch(`${BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
 // ─── Test Categories with 20+ Content Items Each ────────────────────────────
 const TEST_CONTENT = {
   movies: [
@@ -179,7 +188,8 @@ const QUALITY_TIERS = [
 
 async function testProviderSources() {
   console.log("\n🔌 TEST: Provider Sources API");
-  const categories = ["movie", "tv", "anime", "cartoon", "asianDrama", "live"];
+  // "live" is intentionally absent: the approved registry has no Live TV provider.
+  const categories = ["movie", "tv", "anime", "cartoon", "asianDrama"];
   let pass = 0,
     fail = 0;
 
@@ -258,12 +268,12 @@ async function testQualityTiers() {
     { id: "bollyflix", name: "Bollyflix", maxQuality: "4K" },
     { id: "cinestream", name: "CineStream", maxQuality: "4K" },
     { id: "vegamovies", name: "VegaMovies", maxQuality: "4K" },
-    { id: "streamplay", name: "StreamPlay", maxQuality: "4K" },
-    { id: "istreamflare", name: "IStreamFlare", maxQuality: "FHD" },
-    { id: "desicinemas", name: "DesiCinemas", maxQuality: "HD" },
-    { id: "goojara", name: "Goojara", maxQuality: "HD" },
-    { id: "kisskh", name: "KissKh", maxQuality: "4K" },
-    { id: "showbox", name: "ShowBox", maxQuality: "4K" },
+    { id: "moviesmod", name: "MoviesMod", maxQuality: "4K" },
+    { id: "anichi", name: "Anichi", maxQuality: "HD" },
+    { id: "animepahe", name: "AnimePahe", maxQuality: "HD" },
+    { id: "animekhor", name: "AnimeKhor", maxQuality: "HD" },
+    { id: "animedekho", name: "AnimeDekho", maxQuality: "HD" },
+    { id: "kartoons", name: "Kartoons", maxQuality: "HD" },
   ];
 
   let pass = 0;
@@ -300,9 +310,9 @@ async function testSourceSwitching() {
 
   // Test 2: Report 3 failures
   for (let i = 0; i < 3; i++) {
-    await fetch(
-      `${BASE_URL}/api/providers/sources?action=reportFailure&providerId=${original}`,
-    );
+    await postJson(`/api/providers/sources?action=reportFailure`, {
+      providerId: original,
+    });
   }
   res = await fetch(
     `${BASE_URL}/api/providers/sources?action=best&category=movie`,
@@ -315,7 +325,7 @@ async function testSourceSwitching() {
   );
 
   // Test 3: Reset and verify
-  await fetch(`${BASE_URL}/api/providers/sources?action=reset`);
+  await postJson(`/api/providers/sources?action=reset`);
   res = await fetch(
     `${BASE_URL}/api/providers/sources?action=best&category=movie`,
   );
@@ -341,9 +351,10 @@ async function testHealthTracking() {
   ];
   for (const pid of testProviders) {
     const latency = Math.floor(Math.random() * 200) + 10;
-    await fetch(
-      `${BASE_URL}/api/providers/sources?action=reportSuccess&providerId=${pid}&latency=${latency}`,
-    );
+    await postJson(`/api/providers/sources?action=reportSuccess`, {
+      providerId: pid,
+      latency,
+    });
   }
 
   const res = await fetch(`${BASE_URL}/api/providers/sources?action=health`);
@@ -354,9 +365,9 @@ async function testHealthTracking() {
   );
 
   // Test report failure
-  await fetch(
-    `${BASE_URL}/api/providers/sources?action=reportFailure&providerId=hdhub4u`,
-  );
+  await postJson(`/api/providers/sources?action=reportFailure`, {
+    providerId: "hdhub4u",
+  });
   const res2 = await fetch(`${BASE_URL}/api/providers/sources?action=health`);
   const health2 = await res2.json();
   const hdhub = health2.find((h) => h.providerId === "hdhub4u");
@@ -365,7 +376,7 @@ async function testHealthTracking() {
   );
 
   // Reset
-  await fetch(`${BASE_URL}/api/providers/sources?action=reset`);
+  await postJson(`/api/providers/sources?action=reset`);
   return true;
 }
 

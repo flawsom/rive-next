@@ -169,6 +169,106 @@
       opacity: 1;
     }
   }
+  .upNext {
+    position: absolute;
+    bottom: 11rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    animation: upNextIn 0.25s ease;
+
+    .upNextCard {
+      background: var(--bg-gradient);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--bg-color);
+      border-radius: 1rem;
+      padding: 1.1rem 1.4rem;
+      min-width: 18rem;
+      max-width: 24rem;
+      text-align: center;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .upNextLabel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      color: var(--ascent-color);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-family: sans-serif;
+    }
+
+    .upNextTitle {
+      color: var(--primary-3);
+      font-size: 0.95rem;
+      margin: 0.4rem 0 0.8rem;
+      font-family: sans-serif;
+    }
+
+    .upNextControls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+    }
+
+    .upNextPlay {
+      background: var(--ascent-color);
+      color: var(--primary-1);
+      border: none;
+      border-radius: 0.4rem;
+      padding: 0.4rem 1rem;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.8rem;
+      font-family: sans-serif;
+    }
+
+    .upNextCancel {
+      background: transparent;
+      color: var(--primary-2);
+      border: 1px solid var(--primary-2);
+      border-radius: 0.4rem;
+      padding: 0.4rem 1rem;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: sans-serif;
+    }
+
+    .upNextCountdown {
+      color: var(--primary-3);
+      font-size: 0.9rem;
+      font-weight: 700;
+      min-width: 2.2rem;
+      font-family: sans-serif;
+    }
+
+    .upNextToggle {
+      margin-top: 0.7rem;
+      background: none;
+      border: none;
+      color: var(--primary-2);
+      font-size: 0.68rem;
+      cursor: pointer;
+      text-decoration: underline;
+      font-family: sans-serif;
+    }
+  }
+}
+
+@keyframes upNextIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 @media (max-width: 769px) {

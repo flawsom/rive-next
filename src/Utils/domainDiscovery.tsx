@@ -1,3 +1,6 @@
+import { APPROVED_PROVIDER_IDS } from "./providers";
+import type { ProviderManifest } from "./providerManifest";
+
 /**
  * Autonomous Domain Discovery & Resolution Service
  *
@@ -264,32 +267,165 @@ if (typeof window !== "undefined") {
   loadFromStorage();
 }
 
+// ─── Manifest hydration (autonomous domain pool updates) ────────────────────
+// The provider manifest is generated server-side from the CloudStream repos
+// (commit watcher + Kotlin source parser). These functions merge newly
+// discovered domains into the probe pool and invalidate stale probe caches.
+let manifestHydrationPromise: Promise<void> | null = null;
+let manifestHydratedAt = 0;
+const MANIFEST_HYDRATE_INTERVAL = 10 * 60 * 1000;
+
+/**
+ * Merge manifest-discovered domains into the probe pool.
+ * Only providers in the approved registry are accepted.
+ * New domains invalidate that provider's probe cache so the next discovery
+ * round re-probes with the expanded pool, then re-promotes the best domain.
+ */
+export function hydrateDomainsFromManifest(
+  manifest: ProviderManifest | null,
+): void {
+  if (!manifest || !Array.isArray(manifest.providers)) return;
+  let changed = false;
+
+  for (const provider of manifest.providers) {
+    if (!APPROVED_PROVIDER_IDS.has(provider.id)) continue;
+    if (!Array.isArray(provider.domains) || provider.domains.length === 0) {
+      continue;
+    }
+    if (!PROVIDER_DOMAINS[provider.id]) {
+      PROVIDER_DOMAINS[provider.id] = [];
+    }
+    const existing = new Set(PROVIDER_DOMAINS[provider.id]);
+    let added = 0;
+    for (const domain of provider.domains) {
+      const normalized = domain.toLowerCase().replace(/\/+$/, "");
+      if (
+        !normalized ||
+        !normalized.includes(".") ||
+        normalized.includes(" ")
+      ) {
+        continue;
+      }
+      if (!existing.has(normalized)) {
+        PROVIDER_DOMAINS[provider.id].push(normalized);
+        existing.add(normalized);
+        added += 1;
+      }
+    }
+    if (added > 0) {
+      changed = true;
+      // Force re-probe with the expanded domain pool.
+      delete discoveryCache[provider.id];
+    }
+  }
+
+  if (changed) {
+    saveToStorage();
+    // Re-promote the best verified domain now that the pool changed.
+    autoUpdateStreamingUrl().catch(() => {});
+  }
+}
+
+async function syncManifestFromRoute(): Promise<void> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25_000);
+    const response = await fetch("/api/providers/manifest?action=get", {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!response.ok) return;
+    const manifest: ProviderManifest | null = await response.json();
+    if (!manifest) return;
+    hydrateDomainsFromManifest(manifest);
+    manifestHydratedAt = Date.now();
+  } catch {
+    // Network failure — the next call will retry.
+  }
+}
+
+/**
+ * Pull the latest manifest into the probe pool at most once per interval.
+ * Concurrent callers share a single in-flight sync.
+ */
+export function ensureManifestHydrated(): Promise<void> {
+  if (typeof window === "undefined") return Promise.resolve();
+  if (Date.now() - manifestHydratedAt < MANIFEST_HYDRATE_INTERVAL) {
+    return Promise.resolve();
+  }
+  if (manifestHydrationPromise) return manifestHydrationPromise;
+  manifestHydrationPromise = syncManifestFromRoute().finally(() => {
+    manifestHydrationPromise = null;
+  });
+  return manifestHydrationPromise;
+}
+
 // ─── HTTP Probing ────────────────────────────────────────────────────────────
-async function testDomain(
+/**
+ * Direct reachability probe (used server-side or when the verified probe
+ * endpoint is unavailable). With no-cors the response is opaque, so this only
+ * proves the host answered at all.
+ */
+async function directProbe(
   url: string,
-  timeoutMs = DOMAIN_TEST_TIMEOUT,
+  timeoutMs: number,
 ): Promise<{ available: boolean; latency: number }> {
   const start = Date.now();
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    // Use fetch with no-cors to avoid CORS issues while still testing reachability
-    const response = await fetch(url, {
+    await fetch(url, {
       method: "HEAD",
       mode: "no-cors",
       signal: controller.signal,
       cache: "no-store",
     });
-
     clearTimeout(timer);
-    const latency = Date.now() - start;
-
-    // With no-cors, opaque responses still indicate the server is reachable
-    return { available: true, latency };
+    return { available: true, latency: Date.now() - start };
   } catch {
     return { available: false, latency: Infinity };
   }
+}
+
+/**
+ * Verified probe: in the browser this goes through the server-side probe API,
+ * which follows redirects and reports the real HTTP status + latency, so
+ * parked/error pages and unresponsive hosts are not treated as "available".
+ */
+async function testDomain(
+  url: string,
+  timeoutMs = DOMAIN_TEST_TIMEOUT,
+): Promise<{ available: boolean; latency: number }> {
+  if (typeof window !== "undefined") {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs + 3_000);
+      const response = await fetch("/api/providers/domains?action=probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (response.ok) {
+        const data: any = await response.json();
+        const reachable =
+          typeof data.status === "number" &&
+          data.status >= 200 &&
+          data.status < 500 &&
+          typeof data.latency === "number" &&
+          data.latency > 0;
+        return {
+          available: reachable,
+          latency: reachable ? data.latency : Infinity,
+        };
+      }
+    } catch {
+      // Fall back to a direct reachability probe
+    }
+  }
+  return directProbe(url, timeoutMs);
 }
 
 // ─── Repo Fetching ───────────────────────────────────────────────────────────
@@ -395,6 +531,13 @@ function generateSubdomainCandidates(baseDomain: string): string[] {
 export async function discoverDomains(
   providerId: string,
 ): Promise<DomainDiscoveryResult> {
+  // Hydrate the domain pool from the autonomous manifest before probing.
+  // Bounded so a slow first manifest build never blocks a discovery round.
+  await Promise.race([
+    ensureManifestHydrated(),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
+
   // Check cache first (valid for 15 minutes)
   const cached = discoveryCache[providerId];
   if (cached && Date.now() - cached.lastDiscovery < FULL_SCAN_INTERVAL) {
@@ -501,7 +644,7 @@ export async function discoverDomains(
 export async function getBestDomain(
   providerId: string,
 ): Promise<string | null> {
-  // 1. Try fresh discovery
+  // 1. Fresh discovery with verified probes
   try {
     const discovery = await discoverDomains(providerId);
     if (discovery.workingDomains.length > 0) {
@@ -516,11 +659,9 @@ export async function getBestDomain(
     return liveDomainMap[providerId];
   }
 
-  // 3. Fall back to first known domain
-  const knownDomains = PROVIDER_DOMAINS[providerId];
-  if (knownDomains && knownDomains.length > 0) {
-    const first = knownDomains[0];
-    return first.startsWith("http") ? first : `https://${first}`;
+  // 3. Only the operator-configured default may be used without a probe
+  if (providerId === "hdhub4u") {
+    return normalizeConfiguredBaseUrl(process.env.NEXT_PUBLIC_STREAM_URL);
   }
 
   return null;
@@ -529,6 +670,18 @@ export async function getBestDomain(
 /**
  * Get cached domain instantly (no async, for synchronous code paths)
  */
+/**
+ * Normalize an operator-configured base URL (https://…, no trailing slash).
+ * Static known-domain lists are used as probe candidates for discovery,
+ * never as verified playback endpoints.
+ */
+function normalizeConfiguredBaseUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const normalized = raw.trim();
+  if (!/^https?:\/\//i.test(normalized)) return null;
+  return normalized.replace(/\/+$/, "");
+}
+
 export function getCachedDomain(providerId: string): string | null {
   if (liveDomainMap[providerId]) {
     return liveDomainMap[providerId];
@@ -537,10 +690,9 @@ export function getCachedDomain(providerId: string): string | null {
   if (cached?.workingDomains?.length > 0) {
     return cached.workingDomains[0].url;
   }
-  const knownDomains = PROVIDER_DOMAINS[providerId];
-  if (knownDomains?.length > 0) {
-    const first = knownDomains[0];
-    return first.startsWith("http") ? first : `https://${first}`;
+  // Only the configured default source may be used without a successful probe.
+  if (providerId === "hdhub4u") {
+    return normalizeConfiguredBaseUrl(process.env.NEXT_PUBLIC_STREAM_URL);
   }
   return null;
 }
@@ -579,8 +731,10 @@ export async function discoverAllDomains(): Promise<ProviderDomainMap> {
 }
 
 /**
- * Auto-update streaming URL based on latest domain discovery
- * This is called from the watch page and other streaming contexts
+ * Auto-update the active streaming URL from live repo discovery.
+ * Checks the default pair (HDHub4U then MoviesDrive) and promotes the best
+ * verified domain into the live map, persisting it for the whole app.
+ * Called on page load, on failure fallback, and by the background refresher.
  */
 export async function autoUpdateStreamingUrl(): Promise<{
   updated: boolean;
@@ -588,29 +742,30 @@ export async function autoUpdateStreamingUrl(): Promise<{
   provider: string;
   previousUrl: string | null;
 }> {
-  const currentUrl =
-    liveDomainMap["hdhub4u"] || process.env.NEXT_PUBLIC_STREAM_URL;
+  const providers = ["hdhub4u", "moviesdrive"];
 
-  // Try to discover a working domain for the default provider
-  const bestDomain = await getBestDomain("hdhub4u");
+  for (const pid of providers) {
+    const previousUrl = getCachedDomain(pid);
+    const bestDomain = await getBestDomain(pid);
 
-  if (bestDomain && bestDomain !== currentUrl) {
-    liveDomainMap["hdhub4u"] = bestDomain;
-    saveToStorage();
-
-    return {
-      updated: true,
-      newUrl: bestDomain,
-      provider: "hdhub4u",
-      previousUrl: currentUrl || null,
-    };
+    if (bestDomain && bestDomain !== previousUrl) {
+      liveDomainMap[pid] = bestDomain;
+      saveToStorage();
+      return {
+        updated: true,
+        newUrl: bestDomain,
+        provider: pid,
+        previousUrl: previousUrl || null,
+      };
+    }
   }
 
+  const active = getCachedDomain("hdhub4u");
   return {
     updated: false,
-    newUrl: currentUrl || null,
+    newUrl: active,
     provider: "hdhub4u",
-    previousUrl: currentUrl || null,
+    previousUrl: active,
   };
 }
 
@@ -781,6 +936,8 @@ export function startAutoRefresh(intervalMs = FULL_SCAN_INTERVAL): void {
         delete discoveryCache[pid];
         await discoverDomains(pid);
       }
+      // Promote the best verified domain into the live map
+      await autoUpdateStreamingUrl();
     } catch {
       // Silent fail for background refresh
     } finally {
@@ -855,16 +1012,11 @@ export function resolveDownloadUrl(
 }
 
 /**
- * Verify and update the NEXT_PUBLIC_STREAM_URL at runtime
- * Returns the best available streaming URL
+ * Return the best currently configured/verified streaming URL,
+ * or null when the operator has not configured a source.
  */
-export function getActiveStreamUrl(): string {
-  return (
-    liveDomainMap["hdhub4u"] ||
-    getCachedDomain("hdhub4u") ||
-    process.env.NEXT_PUBLIC_STREAM_URL ||
-    "https://hdhub4u.com"
-  );
+export function getActiveStreamUrl(): string | null {
+  return getCachedDomain("hdhub4u");
 }
 
 // Auto-start refresh when module loads in browser
@@ -872,5 +1024,6 @@ if (typeof window !== "undefined") {
   // Start with a small delay to avoid blocking initial page load
   setTimeout(() => {
     startAutoRefresh(FULL_SCAN_INTERVAL);
+    autoUpdateStreamingUrl().catch(() => {});
   }, 5000);
 }

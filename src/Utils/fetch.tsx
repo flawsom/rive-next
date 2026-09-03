@@ -80,9 +80,6 @@ export default async function axiosFetch({
     countries: `${baseURL}/configuration/countries?language=${language}`,
     languages: `${baseURL}/configuration/languages`,
 
-    // random
-    random: `${randomURL}`,
-
     // collections
     collection: `${baseURL}/collection/${id}?language=${language}`,
     searchCollection: `${baseURL}/search/collection?query=${query}&language=${language}&page=${page}`,
@@ -91,8 +88,44 @@ export default async function axiosFetch({
     withKeywordsTv: `${baseURL}/discover/tv?with_keywords=${genreKeywords}&language=${language}&sort_by=${sortBy}${year != undefined ? "&first_air_date_year=" + year : ""}${country != undefined ? "&with_origin_country=" + country : ""}&page=${page}&air_date.lte=${new Date().getFullYear()}-${new Date().getMonth()}-${new Date().getDate()}${sortBy === "first_air_date.desc" ? "&with_runtime.gte=1" : null}`,
     withKeywordsMovie: `${baseURL}/discover/movie?with_keywords=${genreKeywords}&language=${language}&sort_by=${sortBy}${year != undefined ? "&first_air_date_year=" + year : ""}${country != undefined ? "&with_origin_country=" + country : ""}&page=${page}&release_date.lte=${new Date().getFullYear()}-${new Date().getMonth()}-${new Date().getDate()}&with_runtime.gte=1`,
   };
+
+  // ─── Random discovery (deterministic shape expected by consumers) ─────────
+  if (request === "random") {
+    const type = Math.random() < 0.5 ? "movie" : "tv";
+    const endpoint = type === "movie" ? "discover/movie" : "discover/tv";
+    try {
+      const first = await axios.get(
+        `${baseURL}/${endpoint}?language=${language}&page=1&sort_by=popularity.desc`,
+        { params: { api_key: API_KEY } },
+      );
+      const totalPages = Math.min(first.data?.total_pages || 1, 500);
+      const page = Math.max(1, Math.floor(Math.random() * totalPages));
+      const list = await axios.get(
+        `${baseURL}/${endpoint}?language=${language}&page=${page}&sort_by=popularity.desc`,
+        { params: { api_key: API_KEY } },
+      );
+      const results = list.data?.results || [];
+      const pick =
+        results[Math.floor(Math.random() * results.length)] || results[0];
+      if (!pick) return null;
+      return {
+        result: {
+          id: pick.id,
+          type,
+          media_type: type,
+          title: pick.title || pick.name,
+          name: pick.name || pick.title,
+          poster_path: pick.poster_path,
+          backdrop_path: pick.backdrop_path,
+        },
+      };
+    } catch (error) {
+      console.error("Error fetching random:", error);
+      return null;
+    }
+  }
+
   const final_request = requests[request];
-  // console.log({ final_request });
 
   try {
     const response = await axios.get(final_request, {

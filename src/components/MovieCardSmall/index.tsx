@@ -8,13 +8,22 @@ import Link from "next/link";
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
 
-const MovieCardSmall = ({ data, media_type }: any) => {
+const MovieCardSmall = ({
+  data,
+  media_type,
+  progress,
+  customHref,
+  onRemove,
+}: any) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [imagePlaceholder, setImagePlaceholder] = useState(false);
+  const link = customHref
+    ? customHref
+    : `${media_type === "collection" ? `/collections/${data?.id}` : `/detail?type=${media_type}&id=${data?.id}`}`;
   return (
     <Link
       key={data?.id}
-      href={`${media_type === "collection" ? `/collections/${data?.id}` : `/detail?type=${media_type}&id=${data?.id}`}`}
+      href={link}
       className={styles.MovieCardSmall}
       aria-label={data?.name || "poster"}
       data-tooltip-id="tooltip"
@@ -75,8 +84,31 @@ const MovieCardSmall = ({ data, media_type }: any) => {
           alt={data?.id || "sm"}
           // style={!imageLoading ? { opacity: 1 } : { opacity: 0 }}
         />
+        {progress !== undefined && progress !== null && (
+          <div className={styles.progressTrack}>
+            <div
+              className={styles.progressFill}
+              style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+            />
+          </div>
+        )}
       </div>
-      <p>{data?.title || data?.name}</p>
+      <div className={styles.titleRow}>
+        <p>{data?.title || data?.name}</p>
+        {onRemove && (
+          <span
+            className={styles.removeBtn}
+            role="button"
+            aria-label="Remove from continue watching"
+            onClick={(e) => {
+              e.preventDefault();
+              onRemove();
+            }}
+          >
+            ✕
+          </span>
+        )}
+      </div>
     </Link>
   );
 };
