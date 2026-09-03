@@ -1,5 +1,5 @@
 .navbar {
-  border-radius: 0.5rem;
+  border-radius: var(--radius-lg);
   position: fixed;
   display: flex;
   flex-direction: column;
@@ -7,14 +7,41 @@
   left: 0.5rem;
   top: calc(50% - 190px);
   font-size: 1.4rem;
-  padding: 1rem;
-  background: var(--primary-1);
+  padding: 1rem 0.8rem;
   gap: 1rem;
   z-index: 5;
+  background: var(--primary-1);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--primary-2) 25%, transparent);
+  box-shadow: 0 8px 32px var(--shadow-color);
+
+  a,
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition:
+      transform 0.18s ease,
+      filter 0.18s ease,
+      background 0.18s ease;
+
+    &:hover:not(.active) {
+      transform: translateY(-2px) scale(1.08);
+      filter: brightness(1.25);
+    }
+  }
+
+  .active {
+    filter: drop-shadow(0 0 8px var(--glow));
+  }
 }
 
 .inactive {
   fill: var(--primary-2);
+  transition: fill 0.18s ease;
 }
 
 .active {
@@ -27,20 +54,37 @@
 
 @media (max-width: 769px) {
   .navbar {
-    padding: 1.5rem;
+    padding: 1.1rem 1rem;
     width: 100%;
-    left: unset;
+    left: 0;
     bottom: -1px !important;
     flex-direction: row;
     justify-content: space-between;
     font-size: 2.5rem !important;
     top: unset;
-    left: 0;
-    bottom: 0;
     right: unset;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    background: var(--primary-1);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+
+    a,
+    button {
+      padding: 0.3rem;
+      border-radius: 50%;
+
+      &:hover:not(.active) {
+        transform: scale(1.12);
+      }
+    }
+
     svg {
       font-size: 1.4rem;
     }
+
     .mobileHide {
       display: none;
     }

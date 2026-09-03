@@ -191,7 +191,7 @@ const AIPage = () => {
             <BsStars />
           </div>
           <div className={styles.aiTitle}>
-            <h1>Rive AI</h1>
+            <h1>Open Stream AI</h1>
             <p>Your personal streaming assistant</p>
           </div>
           <div className={styles.aiStatus}>

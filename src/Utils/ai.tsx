@@ -10,7 +10,7 @@ import {
 /**
  * AI gateway configuration.
  *
- * Rive talks to an OpenAI-compatible gateway instead of OpenAI directly.
+ * Open Stream talks to an OpenAI-compatible gateway instead of OpenAI directly.
  * Defaults point at the operator's gateway; both values are overridable via
  * environment (Settings → Environment):
  *   OPENAI_BASE_URL  — gateway base (default: https://kiraai.vn/api/v1)
@@ -19,7 +19,7 @@ import {
  *                      reliable model on this gateway — clean token usage,
  *                      "runs forever" economics with solid quality)
  *
- * Freshness/internet: LLMs on a plain gateway have no live browsing, so Rive
+ * Freshness/internet: LLMs on a plain gateway have no live browsing, so Open Stream
  * grounds the assistant with live TMDB data (trending injected into prompts,
  * AI-suggested titles verified against TMDB before display). TMDB is the
  * freshness source; the model reasons over it.
@@ -129,9 +129,9 @@ function buildProviderContext(): string {
 
   return `
 
-## Streaming Sources Available on Rive (${ALL_PROVIDERS.length} total sources)
+## Streaming Sources Available on Open Stream (${ALL_PROVIDERS.length} total sources)
 
-Rive has ${ALL_PROVIDERS.length} streaming sources from two repositories:
+Open Stream has ${ALL_PROVIDERS.length} streaming sources from two repositories:
 - Phisher Repo (${PHISHER_PROVIDERS.length} sources): Primary repo with HDHub4U, 4KHDHub, StreamPlay, and ${getProvidersByCategory("anime").length}+ anime sources
 - CSX Repo (${CSX_PROVIDERS.length} sources): Secondary repo with MoviesDrive, Bollyflix, CineStream, VegaMovies
 
@@ -202,9 +202,7 @@ Use this list to stay current. When users ask what's new or popular, prefer thes
  * TMDB search used to ground AI suggestions in real, discoverable titles.
  * Returns the matched TMDB entry or null when the title does not exist.
  */
-async function tmdbVerifyTitle(
-  title: string,
-): Promise<{
+async function tmdbVerifyTitle(title: string): Promise<{
   id: number;
   name: string;
   year: string;
@@ -238,7 +236,7 @@ async function tmdbVerifyTitle(
 let freshnessCache: { value: string; at: number } | null = null;
 
 // System prompt for the AI movie/show assistant (provider-aware)
-export const SYSTEM_PROMPT = `You are Rive AI, a knowledgeable and enthusiastic movie and TV show assistant for the Rive streaming platform. You help users discover content, provide recommendations, answer questions about movies and TV shows, and offer personalized suggestions.
+export const SYSTEM_PROMPT = `You are Open Stream AI, a knowledgeable and enthusiastic movie and TV show assistant for the Open Stream streaming platform. You help users discover content, provide recommendations, answer questions about movies and TV shows, and offer personalized suggestions.
 
 Your capabilities:
 - Recommend movies and TV shows based on user preferences, mood, genre, or specific criteria
@@ -264,7 +262,7 @@ Guidelines:
 - For Indian content, suggest Hindi sources like HDHub4U, MoviesDrive, DesiCinemas
 - For international content, suggest the best matching source
 - For anime, recommend from the dedicated anime sources
-- Always mention that Rive auto-switches sources if one fails
+- Always mention that Open Stream auto-switches sources if one fails
 - Support multilingual content suggestions (Hindi, Tamil, Telugu, English, Korean, Japanese, Bengali, etc.)
 `;
 

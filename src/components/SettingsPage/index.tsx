@@ -56,7 +56,7 @@ const SettingsPage = ({
     <div className={`${styles.settingsPage} ${styles.authPage}`}>
       <div className={styles.logo}>
         <img src="/images/logo.svg" alt="logo" />
-        <p>Your Personal Streaming Oasis</p>
+        <p>Your Personal Streaming Universe</p>
       </div>
       <div className={styles.settings}>
         <h1>Account</h1>
@@ -184,8 +184,8 @@ const SettingsPage = ({
         </div>
         <h1>Links</h1>
         <div className={styles.group}>
-          <Link href={"https://github.com/Developabile/rive-next"}>
-            <FaGithub /> Github
+          <Link href={"https://github.com/flawsom/rive-next"}>
+            <FaGithub /> Open Stream on GitHub
           </Link>
           <Link href={"/"}>
             <FaGlobe /> Website

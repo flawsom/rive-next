@@ -61,7 +61,7 @@ OPENAI_BASE_URL=https://kiraai.vn/api/v1
 AI_MODEL=mimo-v2.5
 ```
 
-Any OpenAI-compatible gateway works — Rive does not call OpenAI directly.
+Any OpenAI-compatible gateway works — Open Stream does not call OpenAI directly.
 `AI_MODEL` picks the preferred model; a fallback chain automatically tries
 other gateway models on quota/outage errors.
 
@@ -81,8 +81,8 @@ This powers the AI features including:
 
 > [!IMPORTANT]
 >
-> Rive-Next does not host any files, it merely links to 3rd party services.  
+> Open Stream does not host any files, it merely links to 3rd party services.  
 > Legal issues should be taken up with the file hosts and providers.  
-> Rive-Next is not responsible for any media files shown by the video providers.
+> Open Stream is not responsible for any media files shown by the video providers.
 
 Happy Coding :)

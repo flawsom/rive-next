@@ -1,15 +1,33 @@
 .background {
   width: 100%;
   min-height: 100vh;
-  // background: radial-gradient(circle at top right,var(--bg-gradient),var(--bg-color));
   background: var(--bg-color);
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: hidden;
-}
-// @media (max-width: 769px) {
-//   .background {
+  position: relative;
 
-//   }
-// }
+  &::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(
+        55rem 30rem at 85% -10%,
+        color-mix(in srgb, var(--ascent-color) 14%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        45rem 28rem at -10% 110%,
+        color-mix(in srgb, var(--ascent-color) 9%, transparent),
+        transparent 60%
+      );
+  }
+
+  > div > motion-safe {
+    position: relative;
+  }
+}

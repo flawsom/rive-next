@@ -1,0 +1,69 @@
+<svg width="1120" height="560" viewBox="0 0 1120 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Open Stream watch page mockup with AI source routing">
+  <defs>
+    <linearGradient id="wp-panel" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#131B30"/>
+      <stop offset="1" stop-color="#0D1326"/>
+    </linearGradient>
+    <linearGradient id="wp-accent" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#7CB0FF"/>
+      <stop offset="1" stop-color="#3D6FD8"/>
+    </linearGradient>
+    <radialGradient id="wp-glow" cx="400" cy="180" r="320" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F8CFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#4F8CFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1120" height="560" rx="14" fill="#0A0E1A"/>
+
+  <!-- player -->
+  <rect x="0" y="0" width="760" height="430" fill="#05070F"/>
+  <rect x="0" y="0" width="760" height="430" fill="url(#wp-glow)"/>
+  <circle cx="380" cy="190" r="52" stroke="#4F8CFF" stroke-opacity="0.7" stroke-width="6" fill="none"/>
+  <path d="M366 160 L414 190 L366 220 Z" fill="#F5F8FF"/>
+  <rect x="0" y="392" width="760" height="4" fill="#FFFFFF" opacity="0.14"/>
+  <rect x="0" y="392" width="520" height="4" fill="url(#wp-accent)"/>
+  <circle cx="520" cy="394" r="8" fill="#F5F8FF"/>
+  <rect x="20" y="414" width="90" height="10" rx="5" fill="#8FA3C4" opacity="0.6"/>
+  <rect x="140" y="414" width="60" height="10" rx="5" fill="#8FA3C4" opacity="0.35"/>
+  <rect x="640" y="406" width="100" height="26" rx="13" fill="#FFFFFF" opacity="0.10"/>
+
+  <!-- quality chips overlay -->
+  <rect x="604" y="24" width="88" height="26" rx="13" fill="#0A0E1A" opacity="0.75"/>
+  <circle cx="622" cy="37" r="5" fill="#34D399"/>
+  <rect x="634" y="31" width="48" height="12" rx="6" fill="#F5F8FF" opacity="0.9"/>
+
+  <!-- title + meta -->
+  <text x="24" y="472" font-family="Arial" font-size="20" font-weight="bold" fill="#F5F8FF">Title</text>
+  <rect x="92" y="458" width="86" height="18" rx="9" fill="#4F8CFF" opacity="0.3"/>
+  <rect x="188" y="458" width="60" height="18" rx="9" fill="#FFFFFF" opacity="0.10"/>
+  <rect x="24" y="486" width="420" height="12" rx="6" fill="#8FA3C4" opacity="0.55"/>
+
+  <!-- AI source panel -->
+  <rect x="800" y="24" width="296" height="512" rx="12" fill="url(#wp-panel)" stroke="#FFFFFF" stroke-opacity="0.08"/>
+  <rect x="824" y="48" width="180" height="14" rx="7" fill="#F5F8FF" opacity="0.92"/>
+  <rect x="824" y="72" width="220" height="10" rx="5" fill="#8FA3C4" opacity="0.6"/>
+
+  <g font-family="Arial" font-size="13" font-weight="bold">
+    <rect x="824" y="104" width="248" height="64" rx="10" fill="#1B2A48" stroke="#4F8CFF" stroke-opacity="0.55"/>
+    <text x="840" y="130" fill="#F5F8FF">hdhub4u</text>
+    <rect x="960" y="116" width="96" height="18" rx="9" fill="#34D399" opacity="0.22"/>
+    <text x="972" y="130" fill="#34D399">SELECTED</text>
+    <rect x="840" y="144" width="60" height="12" rx="6" fill="#8FA3C4" opacity="0.6"/>
+    <rect x="824" y="188" width="248" height="64" rx="10" fill="#121A2E" stroke="#FFFFFF" stroke-opacity="0.08"/>
+    <text x="840" y="214" fill="#C9D6EC">4khdhub</text>
+    <rect x="840" y="228" width="80" height="12" rx="6" fill="#8FA3C4" opacity="0.45"/>
+    <rect x="824" y="272" width="248" height="64" rx="10" fill="#121A2E" stroke="#FFFFFF" stroke-opacity="0.08"/>
+    <text x="840" y="298" fill="#C9D6EC">moviesdrive</text>
+    <rect x="840" y="312" width="80" height="12" rx="6" fill="#8FA3C4" opacity="0.45"/>
+    <rect x="824" y="356" width="248" height="64" rx="10" fill="#121A2E" stroke="#FFFFFF" stroke-opacity="0.08"/>
+    <text x="840" y="382" fill="#C9D6EC">animelight</text>
+    <rect x="840" y="400" width="80" height="12" rx="6" fill="#8FA3C4" opacity="0.45"/>
+  </g>
+
+  <!-- AI assistant card -->
+  <rect x="824" y="440" width="248" height="76" rx="10" fill="#101A32" stroke="#4F8CFF" stroke-opacity="0.25"/>
+  <circle cx="848" cy="468" r="10" fill="#4F8CFF" opacity="0.85"/>
+  <rect x="866" y="460" width="150" height="10" rx="5" fill="#8FA3C4"/>
+  <rect x="866" y="480" width="180" height="10" rx="5" fill="#8FA3C4" opacity="0.5"/>
+  <rect x="824" y="498" width="96" height="8" rx="4" fill="#4F8CFF" opacity="0.5"/>
+</svg>

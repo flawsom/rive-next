@@ -1,12 +1,12 @@
 {
-  "theme_color": "#f4f7fe",
-  "background_color": "#f4f7fe",
+  "theme_color": "#0a0e1a",
+  "background_color": "#0a0e1a",
   "display": "standalone",
   "scope": "/",
   "start_url": "/",
-  "name": "Rive",
-  "short_name": "Rive",
-  "description": "Your Personal Streaming Oasis.",
+  "name": "Open Stream",
+  "short_name": "Open Stream",
+  "description": "Your Personal Streaming Universe — AI-powered discovery across movies, TV, anime and K-drama.",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",

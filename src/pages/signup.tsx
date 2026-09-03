@@ -22,9 +22,9 @@ const SignupPage = () => {
           src="/images/logo.svg"
           alt="logo"
           data-tooltip-id="tooltip"
-          data-tooltip-content="Rive"
+          data-tooltip-content="Open Stream"
         />
-        <p>Your Personal Streaming Oasis</p>
+        <p>Your Personal Streaming Universe</p>
       </div>
       <div className={styles.settings}>
         <h1>Signup</h1>
@@ -58,7 +58,7 @@ const SignupPage = () => {
           </>
         </div>
         <h4>
-          Already a Rive member!{" "}
+          Already an Open Stream member!{" "}
           <Link href="/login" className={styles.highlight}>
             Login
           </Link>

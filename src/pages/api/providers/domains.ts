@@ -81,12 +81,10 @@ export default async function handler(
     switch (action) {
       case "bestDomain":
         return providerId
-          ? res
-              .status(200)
-              .json({
-                provider: providerId,
-                domain: await getBestDomain(providerId),
-              })
+          ? res.status(200).json({
+              provider: providerId,
+              domain: await getBestDomain(providerId),
+            })
           : res.status(400).json({ error: "providerId is required" });
       case "status":
         return res.status(200).json(getDiscoveryStatus());
@@ -98,12 +96,10 @@ export default async function handler(
         return res.status(200).json({ url: getActiveStreamUrl() });
       case "cachedDomain":
         return providerId
-          ? res
-              .status(200)
-              .json({
-                provider: providerId,
-                domain: getCachedDomain(providerId),
-              })
+          ? res.status(200).json({
+              provider: providerId,
+              domain: getCachedDomain(providerId),
+            })
           : res.status(400).json({ error: "providerId is required" });
       case "discover":
       case "refresh": {
@@ -166,18 +162,16 @@ export default async function handler(
             .json({ error: "Valid providerId and id are required" });
         const resolver =
           action === "resolveStream" ? resolveStreamUrl : resolveDownloadUrl;
-        return res
-          .status(200)
-          .json({
-            url: resolver(
-              providerId,
-              type,
-              id,
-              Number(req.body.season) || undefined,
-              Number(req.body.episode) || undefined,
-            ),
-            provider: providerId,
-          });
+        return res.status(200).json({
+          url: resolver(
+            providerId,
+            type,
+            id,
+            Number(req.body.season) || undefined,
+            Number(req.body.episode) || undefined,
+          ),
+          provider: providerId,
+        });
       }
       case "probe": {
         const url =
@@ -203,7 +197,7 @@ export default async function handler(
             method: "GET",
             redirect: "follow",
             signal: controller.signal,
-            headers: { "user-agent": "RiveSourceProbe/1.0" },
+            headers: { "user-agent": "OpenStreamProbe/1.0" },
           });
           clearTimeout(timer);
           try {

@@ -1,5 +1,5 @@
 /**
- * Comprehensive E2E Test Suite for Rive Streaming Platform
+ * Comprehensive E2E Test Suite for the Open Stream Platform
  * Tests all 20+ items per category with quality tier validation
  * Run: node scripts/e2e-test.js
  */
@@ -423,7 +423,7 @@ async function testProviderSearch() {
 
 async function main() {
   console.log("╔══════════════════════════════════════════════════════════╗");
-  console.log("║  RIVE STREAMING PLATFORM - COMPREHENSIVE E2E TEST SUITE ║");
+  console.log("║  OPEN STREAM PLATFORM - COMPREHENSIVE E2E TEST SUITE     ║");
   console.log("╚══════════════════════════════════════════════════════════╝");
   console.log(`Target: ${BASE_URL}`);
   console.log(`Time: ${new Date().toISOString()}`);

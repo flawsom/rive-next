@@ -5,6 +5,8 @@
 // web apps ship. The legacy format ({ movie: [ids], tv: [ids] }) is still
 // read and migrated transparently.
 
+import { migrateLegacyStorageKeys } from "./storageMigration";
+
 export interface ContinueEntry {
   type: "movie" | "tv";
   id: string | number;
@@ -19,12 +21,13 @@ export interface ContinueEntry {
   updatedAt: number;
 }
 
-const STORAGE_KEY = "RiveStreamContinueWatching";
+const STORAGE_KEY = "OpenStreamContinueWatching";
 const MAX_ENTRIES = 40;
 const COMPLETION_RATIO = 0.95;
 
 function loadRaw(): any {
   if (typeof localStorage === "undefined") return null;
+  migrateLegacyStorageKeys();
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
   } catch {

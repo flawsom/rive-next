@@ -1,0 +1,64 @@
+<svg width="1120" height="560" viewBox="0 0 1120 560" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Open Stream provider health analytics mockup">
+  <defs>
+    <linearGradient id="an-panel" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#121A30"/>
+      <stop offset="1" stop-color="#0C1122"/>
+    </linearGradient>
+    <linearGradient id="an-area" x1="0" y1="120" x2="0" y2="300" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F8CFF" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#4F8CFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="an-line" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#7CB0FF"/>
+      <stop offset="1" stop-color="#3D6FD8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1120" height="560" rx="14" fill="#0A0E1A"/>
+
+  <rect x="64" y="48" width="300" height="22" rx="11" fill="#F5F8FF" opacity="0.95"/>
+  <rect x="64" y="84" width="380" height="12" rx="6" fill="#8FA3C4" opacity="0.6"/>
+
+  <!-- latency chart -->
+  <rect x="64" y="124" width="640" height="392" rx="12" fill="url(#an-panel)" stroke="#FFFFFF" stroke-opacity="0.08"/>
+  <rect x="88" y="148" width="160" height="12" rx="6" fill="#F5F8FF" opacity="0.9"/>
+  <g stroke="#FFFFFF" stroke-opacity="0.06">
+    <line x1="88" y1="220" x2="680" y2="220"/>
+    <line x1="88" y1="280" x2="680" y2="280"/>
+    <line x1="88" y1="340" x2="680" y2="340"/>
+    <line x1="88" y1="400" x2="680" y2="400"/>
+    <line x1="88" y1="460" x2="680" y2="460"/>
+  </g>
+  <path d="M88 300 C 180 240, 260 270, 330 250 S 480 180, 560 210 S 650 230, 680 200 L 680 460 L 88 460 Z" fill="url(#an-area)"/>
+  <path d="M88 300 C 180 240, 260 270, 330 250 S 480 180, 560 210 S 650 230, 680 200" stroke="url(#an-line)" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <circle cx="680" cy="200" r="7" fill="#F5F8FF"/>
+  <circle cx="680" cy="200" r="12" fill="#F5F8FF" opacity="0.25"/>
+  <g fill="#8FA3C4" opacity="0.55">
+    <rect x="88" y="478" width="60" height="8" rx="4"/>
+    <rect x="180" y="478" width="60" height="8" rx="4"/>
+    <rect x="272" y="478" width="60" height="8" rx="4"/>
+    <rect x="364" y="478" width="60" height="8" rx="4"/>
+    <rect x="456" y="478" width="60" height="8" rx="4"/>
+    <rect x="548" y="478" width="60" height="8" rx="4"/>
+  </g>
+
+  <!-- health distribution donut -->
+  <rect x="736" y="124" width="320" height="200" rx="12" fill="url(#an-panel)" stroke="#FFFFFF" stroke-opacity="0.08"/>
+  <rect x="760" y="148" width="140" height="12" rx="6" fill="#F5F8FF" opacity="0.9"/>
+  <circle cx="820" cy="250" r="52" stroke="#34D399" stroke-width="16" fill="none" stroke-dasharray="210 400" stroke-linecap="round" transform="rotate(-90 820 250)"/>
+  <circle cx="820" cy="250" r="52" stroke="#F59E0B" stroke-width="16" fill="none" stroke-dasharray="90 400" stroke-dashoffset="-220" stroke-linecap="round" transform="rotate(-90 820 250)"/>
+  <circle cx="820" cy="250" r="52" stroke="#EF4444" stroke-width="16" fill="none" stroke-dasharray="40 400" stroke-dashoffset="-320" stroke-linecap="round" transform="rotate(-90 820 250)"/>
+  <rect x="900" y="216" width="120" height="10" rx="5" fill="#34D399" opacity="0.8"/>
+  <rect x="900" y="240" width="100" height="10" rx="5" fill="#F59E0B" opacity="0.8"/>
+  <rect x="900" y="264" width="80" height="10" rx="5" fill="#EF4444" opacity="0.8"/>
+
+  <!-- selection funnel -->
+  <rect x="736" y="344" width="320" height="172" rx="12" fill="url(#an-panel)" stroke="#FFFFFF" stroke-opacity="0.08"/>
+  <rect x="760" y="368" width="150" height="12" rx="6" fill="#F5F8FF" opacity="0.9"/>
+  <rect x="760" y="398" width="272" height="18" rx="9" fill="#1B2A48"/>
+  <rect x="760" y="398" width="272" height="18" rx="9" fill="#4F8CFF" opacity="0.85"/>
+  <rect x="760" y="426" width="200" height="18" rx="9" fill="#1B2A48"/>
+  <rect x="760" y="426" width="180" height="18" rx="9" fill="#4F8CFF" opacity="0.6"/>
+  <rect x="760" y="454" width="130" height="18" rx="9" fill="#1B2A48"/>
+  <rect x="760" y="454" width="110" height="18" rx="9" fill="#4F8CFF" opacity="0.45"/>
+  <rect x="760" y="482" width="76" height="18" rx="9" fill="#34D399" opacity="0.8"/>
+</svg>

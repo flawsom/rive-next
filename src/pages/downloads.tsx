@@ -24,9 +24,9 @@ const LoginPage = () => {
           src="/images/logo.svg"
           alt="logo"
           data-tooltip-id="tooltip"
-          data-tooltip-content="Rive"
+          data-tooltip-content="Open Stream"
         />
-        <p>Your Personal Streaming Oasis</p>
+        <p>Your Personal Streaming Universe</p>
       </div>
       <div className={styles.settings}>
         <h1>Downloads</h1>

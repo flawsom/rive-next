@@ -171,9 +171,9 @@ const PROVIDER_DOMAINS: Record<string, string[]> = {
 };
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
-const STORAGE_KEY = "rive_domain_discovery";
-const STORAGE_VERSION_KEY = "rive_domain_discovery_version";
-const STORAGE_DOMAIN_MAP_KEY = "rive_live_domain_map";
+const STORAGE_KEY = "openstream_domain_discovery";
+const STORAGE_VERSION_KEY = "openstream_domain_discovery_version";
+const STORAGE_DOMAIN_MAP_KEY = "openstream_live_domain_map";
 
 // ─── Cache ───────────────────────────────────────────────────────────────────
 const discoveryCache: ProviderDomainMap = {};

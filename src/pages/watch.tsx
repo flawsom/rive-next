@@ -615,17 +615,17 @@ const Watch = () => {
   const [autoAdvanceOn, setAutoAdvanceOn] = useState(true);
 
   useEffect(() => {
-    setAutoAdvanceOn(localStorage.getItem("rive_auto_advance") !== "off");
+    setAutoAdvanceOn(localStorage.getItem("openstream_auto_advance") !== "off");
   }, []);
 
   const autoAdvanceEnabled = () => {
     if (typeof window === "undefined") return true;
-    return localStorage.getItem("rive_auto_advance") !== "off";
+    return localStorage.getItem("openstream_auto_advance") !== "off";
   };
 
   const toggleAutoAdvance = () => {
-    const enabled = localStorage.getItem("rive_auto_advance") !== "off";
-    localStorage.setItem("rive_auto_advance", enabled ? "off" : "on");
+    const enabled = localStorage.getItem("openstream_auto_advance") !== "off";
+    localStorage.setItem("openstream_auto_advance", enabled ? "off" : "on");
     setAutoAdvanceOn(!enabled);
     setUpNext(null);
     toast.info(enabled ? "Auto-play next: OFF" : "Auto-play next: ON", {

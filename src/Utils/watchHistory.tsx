@@ -4,6 +4,7 @@
 
 import { auth } from "./firebase";
 import { pushFbHistory, fetchFbHistory } from "./firebaseUser";
+import { migrateLegacyStorageKeys } from "./storageMigration";
 
 export interface HistoryEntry {
   type: "movie" | "tv";
@@ -17,11 +18,12 @@ export interface HistoryEntry {
   updatedAt: number;
 }
 
-const STORAGE_KEY = "RiveStreamHistory";
+const STORAGE_KEY = "OpenStreamHistory";
 const MAX_ENTRIES = 100;
 
 function loadRaw(): any {
   if (typeof localStorage === "undefined") return null;
+  migrateLegacyStorageKeys();
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
   } catch {

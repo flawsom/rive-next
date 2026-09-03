@@ -1,0 +1,61 @@
+<svg width="2000" height="312" viewBox="0 0 2000 312" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Open Stream hero banner">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="2000" y2="312" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A0E1A"/>
+      <stop offset="0.5" stop-color="#0D1526"/>
+      <stop offset="1" stop-color="#0A0E1A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="820" y1="76" x2="1130" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7CB0FF"/>
+      <stop offset="1" stop-color="#3D6FD8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="975" cy="156" r="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F8CFF" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#4F8CFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fadeL" x1="0" y1="0" x2="700" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F8CFF" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#4F8CFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="fadeR" x1="2000" y1="0" x2="1300" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4F8CFF" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#4F8CFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="312" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="2000" height="312" fill="url(#bg)"/>
+  <rect width="2000" height="312" fill="url(#shine)"/>
+  <rect width="2000" height="312" fill="url(#glow)"/>
+
+  <!-- poster grid, faded at the edges -->
+  <g opacity="0.5">
+    <rect x="40" y="40" width="120" height="180" rx="10" fill="url(#fadeL)"/>
+    <rect x="190" y="24" width="120" height="180" rx="10" fill="url(#fadeL)"/>
+    <rect x="340" y="52" width="120" height="180" rx="10" fill="url(#fadeL)"/>
+    <rect x="490" y="36" width="120" height="180" rx="10" fill="url(#fadeL)"/>
+    <rect x="1840" y="40" width="120" height="180" rx="10" fill="url(#fadeR)"/>
+    <rect x="1690" y="24" width="120" height="180" rx="10" fill="url(#fadeR)"/>
+    <rect x="1540" y="52" width="120" height="180" rx="10" fill="url(#fadeR)"/>
+    <rect x="1390" y="36" width="120" height="180" rx="10" fill="url(#fadeR)"/>
+  </g>
+
+  <!-- mark: ring + play glyph, echoing the app icon -->
+  <g transform="translate(855 76)">
+    <circle cx="100" cy="100" r="94" stroke="url(#accent)" stroke-width="8" fill="none" opacity="0.9"/>
+    <path d="M78 58 L146 100 L78 142 Z" fill="url(#accent)"/>
+    <circle cx="100" cy="100" r="146" stroke="#4F8CFF" stroke-opacity="0.14" stroke-width="2" fill="none"/>
+  </g>
+
+  <!-- wordmark -->
+  <g font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-weight="700" letter-spacing="14">
+    <text x="982" y="150" font-size="76" fill="#F5F8FF">OPEN</text>
+    <text x="982" y="242" font-size="76" fill="url(#accent)">STREAM</text>
+  </g>
+  <g font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="21" fill="#8FA3C4" letter-spacing="5">
+    <text x="985" y="284">AI-POWERED STREAMING · MOVIES · TV · ANIME · K-DRAMA</text>
+  </g>
+</svg>

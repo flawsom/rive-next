@@ -12,7 +12,10 @@
  * Run against a running Next.js server (default http://localhost:3000):
  *   node scripts/consumer-e2e.js
  */
-const BASE = process.env.RIVE_E2E_BASE || "http://localhost:3000";
+const BASE =
+  process.env.OPENSTREAM_E2E_BASE ||
+  process.env.RIVE_E2E_BASE ||
+  "http://localhost:3000";
 
 let passed = 0;
 let failed = 0;
@@ -89,7 +92,7 @@ async function post(path, body, { timeout = 30000 } = {}) {
 
 const main = async () => {
   console.log("╔══════════════════════════════════════════════════════╗");
-  console.log("║  RIVE — CONSUMER E2E (pages, proxy, sources, media) ║");
+  console.log("║ OPEN STREAM — CONSUMER E2E (pages, proxy, sources, media) ║");
   console.log("╚══════════════════════════════════════════════════════╝");
   console.log(`Target: ${BASE}`);
 

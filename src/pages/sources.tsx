@@ -276,7 +276,7 @@ const SourcesPage = () => {
           <span>{stats.total || ""}</span> Active Sources
         </h1>
         <p>
-          The approved source lineup from Phisher &amp; CSX repos. Rive
+          The approved source lineup from Phisher &amp; CSX repos. Open Stream
           automatically selects the fastest working source and switches if one
           fails.
         </p>

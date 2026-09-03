@@ -26,9 +26,9 @@ const LoginPage = () => {
           src="/images/logo.svg"
           alt="logo"
           data-tooltip-id="tooltip"
-          data-tooltip-content="Rive"
+          data-tooltip-content="Open Stream"
         />
-        <p>Your Personal Streaming Oasis</p>
+        <p>Your Personal Streaming Universe</p>
       </div>
       <div className={styles.settings}>
         <h1>Login</h1>
@@ -57,7 +57,7 @@ const LoginPage = () => {
           SignIn with <span className={styles.highlight}>Google</span>
         </h4>
         <h4>
-          Become Rive member!{" "}
+          Become Open Stream member!{" "}
           <Link href="/signup" className={styles.highlight}>
             Signup
           </Link>
