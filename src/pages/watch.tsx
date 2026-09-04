@@ -32,6 +32,7 @@ import {
   findProviderById,
   getProviderQualityTier,
   getProvidersByCategory,
+  buildEmbedUrl,
   ALL_PROVIDERS,
 } from "@/Utils/providers";
 import {
@@ -329,6 +330,25 @@ const Watch = () => {
 
   useEffect(() => {
     if (!currentProvider || !id || !type) return;
+    // Universal id-routed providers (VidLink/2Embed/VidSrc) embed ANY title
+    // straight from its TMDB id — no verification needed, playback is instant
+    // and never depends on a provider site having the title.
+    if (currentProvider.urlPattern) {
+      const url = buildEmbedUrl(
+        currentProvider,
+        type as "movie" | "tv",
+        id,
+        season ? parseInt(season) : undefined,
+        episode ? parseInt(episode) : undefined,
+      );
+      if (url) {
+        setResolvedPage({ url, method: "universal" });
+        setResolveState("ok");
+      } else {
+        setResolveState("miss");
+      }
+      return;
+    }
     const title = data?.title || data?.name;
     if (!title) return; // TMDB metadata lands in a moment; then we resolve
     let cancelled = false;
@@ -668,7 +688,7 @@ const Watch = () => {
         (pr) =>
           pr.id !== currentProvider.id &&
           !triedProvidersRef.current.has(pr.id) &&
-          getCachedDomain(pr.id) !== null,
+          (getCachedDomain(pr.id) !== null || !!pr.embedBase),
       ) ||
       candidates.find(
         (pr) =>

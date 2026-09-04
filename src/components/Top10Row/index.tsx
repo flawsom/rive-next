@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import styles from "./style.module.scss";
 import axiosFetch from "@/Utils/fetchBackend";
 import { fetchGeo } from "@/Utils/geo";
+import { useHoverScroll } from "@/Utils/useHoverScroll";
 import { BsFire } from "react-icons/bs";
 import MovieCardSmall from "../MovieCardSmall";
 import Skeleton from "react-loading-skeleton";
@@ -20,6 +21,7 @@ const Top10Row = () => {
   const [items, setItems] = useState<any[]>([]);
   const [label, setLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const rowRef = useHoverScroll<HTMLDivElement>();
 
   useEffect(() => {
     let cancelled = false;
@@ -79,7 +81,7 @@ const Top10Row = () => {
             : "most watched right now"}
         </span>
       </h1>
-      <div className={styles.rowList}>
+      <div className={styles.rowList} ref={rowRef}>
         {loading
           ? dummyList.map((ele) => (
               <Skeleton className={styles.loading} key={ele} />

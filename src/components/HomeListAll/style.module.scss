@@ -9,6 +9,23 @@
     width: 100%;
     overflow: auto;
     gap: 1.2rem;
+    // Premium slim scrollbar — visible affordance, invisible chrome.
+    scrollbar-width: thin;
+    scrollbar-color: rgba(143, 163, 196, 0.35) transparent;
+    padding-bottom: 0.75rem;
+    &::-webkit-scrollbar {
+      height: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: rgba(143, 163, 196, 0.35);
+      border-radius: 999px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background: rgba(143, 163, 196, 0.6);
+    }
     .loading {
       height: 15rem;
       width: 10rem;

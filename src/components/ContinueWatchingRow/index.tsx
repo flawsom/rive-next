@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import styles from "./style.module.scss";
 import axiosFetch from "@/Utils/fetchBackend";
+import { useHoverScroll } from "@/Utils/useHoverScroll";
 import { BsPlayCircleFill, BsClockHistory } from "react-icons/bs";
 import MovieCardSmall from "../MovieCardSmall";
 import Skeleton from "react-loading-skeleton";
@@ -25,6 +26,7 @@ const dummyList = [1, 2, 3, 4, 5];
 const ContinueWatchingRow = () => {
   const [cards, setCards] = useState<CardData[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const rowRef = useHoverScroll<HTMLDivElement>();
 
   useEffect(() => {
     let cancelled = false;
@@ -109,7 +111,7 @@ const ContinueWatchingRow = () => {
         <BsClockHistory className={styles.rowIcon} /> Continue Watching
         <span className={styles.rowHint}>resumed where you left off</span>
       </h1>
-      <div className={styles.rowList}>
+      <div className={styles.rowList} ref={rowRef}>
         {cards.map((card) => {
           const percent = getProgressPercent(card);
           return (

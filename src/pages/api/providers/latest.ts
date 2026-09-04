@@ -13,6 +13,12 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { setPrivateApiHeaders } from "@/Utils/apiValidation";
 import { getBestDomain, getDomainPatterns } from "@/Utils/domainDiscovery";
 
+// Searchable providers whose homepage lists fresh uploads.
+const CRAWLABLE: Record<string, string[]> = {
+  hdhub4u: ["hdhub4u"],
+  moviesdrive: ["moviesdrive"],
+};
+
 export const maxDuration = 30;
 
 const UA =
@@ -161,7 +167,10 @@ async function enrichWithTmdb(uploads: Upload[]): Promise<Upload[]> {
             ) ||
             null,
           overview: hit.overview || null,
+          // Normalize: TMDB path (for the shared poster component) plus the
+          // absolute URL kept for any direct rendering.
           poster: hit.poster_path ? `${IMG_BASE}${hit.poster_path}` : u.poster,
+          posterPath: hit.poster_path || null,
         };
       } catch {
         return u;
@@ -181,12 +190,16 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const requested =
+    typeof req.query.provider === "string" ? req.query.provider : "hdhub4u";
+  const providerId = CRAWLABLE[requested] ? requested : "hdhub4u";
+
   // Candidate domains: the verified/active domain first, then known mirrors
   // from the discovery patterns — some block datacenter IPs with 429s.
-  const primary = await getBestDomain("hdhub4u");
+  const primary = await getBestDomain(providerId);
   const candidates: string[] = [];
   if (primary) candidates.push(primary);
-  for (const pattern of getDomainPatterns().hdhub4u || []) {
+  for (const pattern of getDomainPatterns()[providerId] || []) {
     const url = /^https?:/i.test(pattern) ? pattern : `https://${pattern}`;
     if (!candidates.includes(url)) candidates.push(url);
     if (candidates.length >= 4) break;
@@ -222,7 +235,7 @@ export default async function handler(
         "s-maxage=900, stale-while-revalidate=3600",
       );
       return res.status(200).json({
-        provider: "hdhub4u",
+        provider: providerId,
         source: domain,
         uploads: uploads.filter((u) => u.tmdbId || u.poster),
       });
@@ -231,9 +244,9 @@ export default async function handler(
     }
   }
 
-  // Soft-fail: the row hides itself when every domain is unreachable.
+  // Soft-fail: the row shows its calm note when every domain is unreachable.
   return res.status(200).json({
-    provider: "hdhub4u",
+    provider: providerId,
     source: primary,
     uploads: [],
     reason: lastReason,

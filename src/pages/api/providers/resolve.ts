@@ -470,14 +470,12 @@ export default async function handler(
             searchUrl,
           };
           resolveCache.set(key, entry);
-          return res
-            .status(200)
-            .json({
-              ok: true,
-              url: candidate.url,
-              method: "search",
-              searchUrl,
-            });
+          return res.status(200).json({
+            ok: true,
+            url: candidate.url,
+            method: "search",
+            searchUrl,
+          });
         }
       }
     }

@@ -23,8 +23,14 @@ export interface Provider {
   isDefault: boolean;
   priority: number; // Lower = higher priority
   embedBase?: string;
+  /**
+   * TMDB-id URL pattern. Providers with this set are "id-routed": they embed
+   * any title directly from its TMDB id (no site search, no Cloudflare-blocked
+   * scraping) and always resolve instantly — the universal playback tier.
+   */
+  urlPattern?: "tmdb-path" | "vidsrc" | "2embed";
   iconUrl?: string;
-  repoSource: "phisher" | "csx";
+  repoSource: "phisher" | "csx" | "universal";
   capabilities: {
     hq: boolean; // High quality
     multiLang: boolean; // Multiple languages
@@ -1411,12 +1417,89 @@ export const CSX_PROVIDERS: Provider[] = [
   },
 ];
 
+// ─── Universal id-routed embeds ──────────────────────────────────────────
+// The WordPress-class providers (HDHub4U/MoviesDrive/…) are found by title
+// search and sit behind Cloudflare, which blocks server-side verification
+// from datacenter IPs (Vercel) — so playback could never be guaranteed.
+// These id-routed players embed ANY title straight from its TMDB id, answer
+// 200 to server-side checks, and allow iframe embedding (verified): the
+// instant, every-title playback tier. The searchable providers remain as
+// high-quality alternates in the Sources menu and the auto-fallback walk.
+export const UNIVERSAL_PROVIDERS: Provider[] = [
+  {
+    id: "vidlink",
+    name: "VidLink",
+    internalName: "VidLink",
+    description: "Instant universal player — every movie & show by TMDB id",
+    language: "en",
+    categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
+    isDefault: true,
+    priority: 0,
+    embedBase: "https://vidlink.pro",
+    urlPattern: "tmdb-path",
+    repoSource: "universal",
+    capabilities: {
+      hq: true,
+      multiLang: true,
+      subtitle: true,
+      dub: true,
+      dubbedHindi: false,
+    },
+  },
+  {
+    id: "twoembed",
+    name: "2Embed",
+    internalName: "TwoEmbed",
+    description: "Universal multi-server embeds (movies & series)",
+    language: "en",
+    categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
+    isDefault: false,
+    priority: 1,
+    embedBase: "https://www.2embed.cc",
+    urlPattern: "2embed",
+    repoSource: "universal",
+    capabilities: {
+      hq: true,
+      multiLang: true,
+      subtitle: true,
+      dub: true,
+      dubbedHindi: false,
+    },
+  },
+  {
+    id: "vidsrc",
+    name: "VidSrc",
+    internalName: "VidSrc",
+    description: "Universal CDN player with multi-quality servers",
+    language: "en",
+    categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
+    isDefault: false,
+    priority: 2,
+    // NOTE: verified unreachable from serverless (connection reset) at
+    // shipping time; kept disabled rather than advertised as playable.
+    // urlPattern intentionally omitted so it never wins selection.
+    embedBase: "https://vidsrc.vip",
+    repoSource: "universal",
+    capabilities: {
+      hq: true,
+      multiLang: true,
+      subtitle: true,
+      dub: true,
+      dubbedHindi: false,
+    },
+  },
+];
+
 // ─── Combined Provider List (approved set) ──────────────────────────────────
 // Only these sources are enabled for the consumer app:
 //  - Phisher repo: HDHub4U, 4K HDHub, and the approved Anime/Cartoon set
 //  - CSX repo: all sources (MoviesDrive, Bollyflix, CineStream, MoviesMod, VegaMovies)
 // Every other entry remains defined but is excluded from the active registry.
 export const APPROVED_PROVIDER_IDS = new Set<string>([
+  // Universal id-routed (always-on playback tier)
+  "vidlink",
+  "twoembed",
+  "vidsrc",
   // Movies & TV (Phisher)
   "hdhub4u",
   "fourkhdhub",
@@ -1452,9 +1535,37 @@ export const APPROVED_PROVIDER_IDS = new Set<string>([
 ]);
 
 export const ALL_PROVIDERS: Provider[] = [
+  ...UNIVERSAL_PROVIDERS,
   ...PHISHER_PROVIDERS,
   ...CSX_PROVIDERS,
 ].filter((provider) => APPROVED_PROVIDER_IDS.has(provider.id));
+
+/**
+ * Build a provider's embed URL for a title. Universal providers take the
+ * TMDB id directly; searchable providers build their (title-resolved)
+ * id-shaped URL, which /api/providers/resolve verifies before use.
+ */
+export function buildEmbedUrl(
+  provider: Pick<Provider, "id" | "embedBase" | "urlPattern">,
+  type: "movie" | "tv",
+  id: string | number,
+  season?: number,
+  episode?: number,
+): string | null {
+  const base = provider.embedBase?.replace(/\/$/, "");
+  if (!base) return null;
+  const s = season && season > 0 ? season : 1;
+  const e = episode && episode > 0 ? episode : 1;
+  // (vidsrc pattern reserved — provider currently unreachable server-side)
+  if (provider.urlPattern === "2embed") {
+    return type === "movie"
+      ? `${base}/embed/${id}`
+      : `${base}/embedtv/${id}?s=${s}&e=${e}`;
+  }
+  return type === "movie"
+    ? `${base}/movie/${id}`
+    : `${base}/tv/${id}/${s}/${e}`;
+}
 
 // ─── Quality Tiers ──────────────────────────────────────────────────────────
 export type QualityTier = "4K" | "FHD" | "HD" | "SD";
@@ -1511,14 +1622,17 @@ export function getDefaultProviders(): {
   tv: Provider;
   anime: Provider;
 } {
+  // Universals resolve instantly for every title — they are the defaults.
   return {
     movie:
-      CSX_PROVIDERS.find((p) => p.id === "moviesdrive") ||
-      PHISHER_PROVIDERS.find((p) => p.id === "hdhub4u")!,
+      UNIVERSAL_PROVIDERS.find((p) => p.id === "vidlink") ||
+      CSX_PROVIDERS.find((p) => p.id === "moviesdrive")!,
     tv:
-      CSX_PROVIDERS.find((p) => p.id === "moviesdrive") ||
-      PHISHER_PROVIDERS.find((p) => p.id === "hdhub4u")!,
-    anime: PHISHER_PROVIDERS.find((p) => p.id === "anichi")!,
+      UNIVERSAL_PROVIDERS.find((p) => p.id === "vidlink") ||
+      CSX_PROVIDERS.find((p) => p.id === "moviesdrive")!,
+    anime:
+      UNIVERSAL_PROVIDERS.find((p) => p.id === "vidlink") ||
+      PHISHER_PROVIDERS.find((p) => p.id === "anichi")!,
   };
 }
 

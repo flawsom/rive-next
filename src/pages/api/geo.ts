@@ -117,13 +117,11 @@ export default async function handler(
     const resolved = await lookupByIp(ip);
     if (resolved) {
       res.setHeader("Cache-Control", "no-store");
-      return res
-        .status(200)
-        .json({
-          country: resolved,
-          regionName: countryName(resolved),
-          source: "edge",
-        });
+      return res.status(200).json({
+        country: resolved,
+        regionName: countryName(resolved),
+        source: "edge",
+      });
     }
   }
 

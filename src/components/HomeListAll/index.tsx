@@ -11,6 +11,7 @@ import { getContinueWatching } from "@/Utils/continueWatching";
 import { filterForKids, PROFILE_CHANGED_EVENT } from "@/Utils/profiles";
 import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 import { fetchGeo } from "@/Utils/geo";
+import { useHoverScrollDelegate } from "@/Utils/useHoverScroll";
 import { useInView } from "react-intersection-observer";
 
 const externalImageLoader = ({ src }: { src: string }) =>
@@ -33,6 +34,9 @@ function shuffle(array: any) {
 const dummyList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const HomeListAll = () => {
   const [, setProfileTick] = useState(0);
+  // Premium hover-wheel scrolling for every row on the home page — one
+  // delegated listener manages all [data-hscroll] rows as they mount.
+  const hscrollRef = useHoverScrollDelegate<HTMLDivElement>();
   useEffect(() => {
     const onProfileChange = () => setProfileTick((t) => t + 1);
     window.addEventListener(PROFILE_CHANGED_EVENT, onProfileChange);
@@ -388,7 +392,7 @@ const HomeListAll = () => {
   // }, [continueWatching]);
 
   return (
-    <div className={styles.HomeListAll}>
+    <div className={styles.HomeListAll} ref={hscrollRef}>
       <ContinueWatchingRow />
       <Top10Row />
       <LatestUploadsRow />
@@ -403,7 +407,7 @@ const HomeListAll = () => {
           </span>
         ) : null}
       </h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {geo &&
           filterForKids(regionTrending)?.map((ele: any) => {
             return <MovieCardSmall data={ele} media_type="movie" />;
@@ -414,7 +418,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={worldTrendingRef}>Trending Around the World</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(worldTrending)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="movie" />;
         })}
@@ -428,6 +432,7 @@ const HomeListAll = () => {
           <h1>Recommendation</h1>
           <div
             className={styles.HomeListSection}
+            data-hscroll
             data-tooltip-id="tooltip"
             data-tooltip-content="recommendation based on what you have watched!"
           >
@@ -445,7 +450,7 @@ const HomeListAll = () => {
         </>
       ) : null}
       <h1 ref={latestMovieRef}>Latest Movies</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(latestMovie)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="movie" />;
         })}
@@ -455,7 +460,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={latestTvRef}>Latest TV Shows</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(latestTv)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
@@ -465,7 +470,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={latestKoreanDramaRef}>Latest K-Dramas</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(latestKoreanDrama)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
@@ -475,7 +480,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={popularKoreanDramaRef}>Popular K-Dramas</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(popularKoreanDrama)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
@@ -485,7 +490,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={latestAnimeRef}>Latest Anime</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(latestAnime)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
@@ -495,7 +500,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={popularAnimeRef}>Popular Anime</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(popularAnime)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
@@ -505,7 +510,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={popularMovieRef}>Popular Movies</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(popularMovie)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="movie" />;
         })}
@@ -515,7 +520,7 @@ const HomeListAll = () => {
           ))}
       </div>
       <h1 ref={popularTvRef}>Popular TV Shows</h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {filterForKids(popularTv)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
@@ -527,7 +532,7 @@ const HomeListAll = () => {
       <h1 ref={regionPopularTvRef}>
         Popular Shows in {geo?.regionName || "Your Region"}
       </h1>
-      <div className={styles.HomeListSection}>
+      <div className={styles.HomeListSection} data-hscroll>
         {geo &&
           filterForKids(regionPopularTv)?.map((ele: any) => {
             return <MovieCardSmall data={ele} media_type="tv" />;
