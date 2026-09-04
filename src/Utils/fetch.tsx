@@ -49,6 +49,13 @@ export default async function axiosFetch({
     trendingTv: `${baseURL}/trending/tv/week?language=${language}&page=${page}`,
     trendingMovieDay: `${baseURL}/trending/movie/day?language=${language}&page=${page}`,
     trendingTvDay: `${baseURL}/trending/tv/day?language=${language}&page=${page}`,
+    // Geo-aware discovery: charts scoped to the visitor's country so a viewer
+    // in India sees India's charts, not the US. TMDB's trending endpoints are
+    // global-only, so regional charts use discover filtered by the title's
+    // origin country (local productions, ranked by real popularity).
+    regionTrendingMovie: `${baseURL}/discover/movie?with_origin_country=${country || "US"}&sort_by=popularity.desc&language=${language}&page=${page}`,
+    regionTrendingTv: `${baseURL}/discover/tv?with_origin_country=${country || "US"}&sort_by=popularity.desc&language=${language}&page=${page}&with_runtime.gte=1`,
+    regionPopularMovie: `${baseURL}/movie/popular?region=${country || "US"}&language=${language}&page=${page}`,
     searchMulti: `${baseURL}/search/multi?query=${query}&language=${language}&page=${page}`,
     searchKeyword: `${baseURL}/search/keyword?query=${query}&language=${language}&page=${page}`,
     searchMovie: `${baseURL}/search/movie?query=${query}&language=${language}&page=${page}`,

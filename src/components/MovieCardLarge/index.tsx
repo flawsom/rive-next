@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import styles from "./style.module.scss";
 import Link from "next/link";
+import { safeDetailHref } from "@/Utils/safeLinks";
 import { motion, AnimatePresence } from "framer-motion";
 import Skeleton from "react-loading-skeleton";
 import axiosFetch from "@/Utils/fetchBackend";
@@ -39,6 +40,17 @@ const MovieCardLarge = ({ data, media_type, genresMovie, genresTv }: any) => {
     }
   });
   console.log({ Genres });
+  // Never render a dead link (guards /detail?type=undefined&id=undefined).
+  const href = safeDetailHref(data, media_type);
+  if (!href)
+    return (
+      <div className={styles.MovieCardSmall} aria-hidden="true">
+        <div className={styles.img} />
+        <div className={styles.metaData}>
+          <h1>{data?.title || data?.name || ""}</h1>
+        </div>
+      </div>
+    );
 
   // useEffect(() => {
   //   const fetchData = async () => {
@@ -56,7 +68,7 @@ const MovieCardLarge = ({ data, media_type, genresMovie, genresTv }: any) => {
   return (
     <Link
       key={data?.id}
-      href={`${data?.media_type === "person" ? "/person?id=" + data?.id : "/detail?type=" + (data?.media_type || media_type) + "&id=" + data?.id}`}
+      href={data?.media_type === "person" ? `/person?id=${data?.id}` : href}
       className={styles.MovieCardSmall}
       aria-label={data?.name || "poster"}
       data-tooltip-id="tooltip"

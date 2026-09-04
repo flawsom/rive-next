@@ -6,9 +6,11 @@ import Skeleton from "react-loading-skeleton";
 import MovieCardSmall from "../MovieCardSmall";
 import ContinueWatchingRow from "../ContinueWatchingRow";
 import Top10Row from "../Top10Row";
+import LatestUploadsRow from "../LatestUploadsRow";
 import { getContinueWatching } from "@/Utils/continueWatching";
 import { filterForKids, PROFILE_CHANGED_EVENT } from "@/Utils/profiles";
 import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
+import { fetchGeo } from "@/Utils/geo";
 import { useInView } from "react-intersection-observer";
 
 const externalImageLoader = ({ src }: { src: string }) =>
@@ -45,6 +47,16 @@ const HomeListAll = () => {
   const [popularAnime, setPopularAnime] = useState([]);
   const [popularMovie, setPopularMovie] = useState([]);
   const [popularTv, setPopularTv] = useState([]);
+  // Geo-aware rows: charts scoped to the visitor's country (via server-side
+  // geo detection) plus a worldwide chart that always works.
+  const [geo, setGeo] = useState<{
+    country: string;
+    regionName?: string;
+    source?: string;
+  } | null>(null);
+  const [regionTrending, setRegionTrending] = useState([]);
+  const [regionPopularTv, setRegionPopularTv] = useState([]);
+  const [worldTrending, setWorldTrending] = useState([]);
   const [loading, setLoading] = useState(true);
   // const [continueWatching, setContinueWatching] = useState<any>();
   const [recommendations, setRecommendations] = useState([]);
@@ -72,6 +84,22 @@ const HomeListAll = () => {
   const [popularTvRef, popularTvInView] = useInView({
     triggerOnce: true,
   });
+  const [regionTrendingRef, regionTrendingInView] = useInView({
+    triggerOnce: true,
+  });
+  const [regionPopularTvRef, regionPopularTvInView] = useInView({
+    triggerOnce: true,
+  });
+  const [worldTrendingRef, worldTrendingInView] = useInView({
+    triggerOnce: true,
+  });
+
+  // Resolve the visitor's country once; rows below re-fetch when it lands.
+  useEffect(() => {
+    fetchGeo().then((info) =>
+      setGeo({ country: info.country, regionName: info.regionName }),
+    );
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -280,6 +308,50 @@ const HomeListAll = () => {
     if (popularTvInView) fetchData();
   }, [popularTvInView]);
 
+  // ── Geo-aware: what's hot in YOUR country ──
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axiosFetch({
+          requestID: "regionTrendingMovie",
+          country: geo?.country || "US",
+        });
+        setRegionTrending(res?.results || []);
+      } catch (error) {
+        console.error("Error fetching regional trending:", error);
+      }
+    };
+    if (regionTrendingInView && geo) fetchData();
+  }, [regionTrendingInView, geo]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axiosFetch({
+          requestID: "regionTrendingTv",
+          country: geo?.country || "US",
+        });
+        setRegionPopularTv(res?.results || []);
+      } catch (error) {
+        console.error("Error fetching regional TV:", error);
+      }
+    };
+    if (regionPopularTvInView && geo) fetchData();
+  }, [regionPopularTvInView, geo]);
+
+  // ── Worldwide chart: always available, regardless of geo detection ──
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axiosFetch({ requestID: "trendingMovie" });
+        setWorldTrending(res?.results || []);
+      } catch (error) {
+        console.error("Error fetching worldwide trending:", error);
+      }
+    };
+    if (worldTrendingInView) fetchData();
+  }, [worldTrendingInView]);
+
   // useEffect(() => {
   //   const asyncFunc = async () => {
   //     let arr: any[] = [];
@@ -319,6 +391,38 @@ const HomeListAll = () => {
     <div className={styles.HomeListAll}>
       <ContinueWatchingRow />
       <Top10Row />
+      <LatestUploadsRow />
+      <h1 ref={regionTrendingRef}>
+        Trending in {geo?.regionName || "Your Region"}
+        {geo?.source === "fallback" ? (
+          <span
+            className={styles.geoHint}
+            title="Location unavailable — showing worldwide"
+          >
+            (worldwide)
+          </span>
+        ) : null}
+      </h1>
+      <div className={styles.HomeListSection}>
+        {geo &&
+          filterForKids(regionTrending)?.map((ele: any) => {
+            return <MovieCardSmall data={ele} media_type="movie" />;
+          })}
+        {(!geo || regionTrending?.length === 0) &&
+          dummyList.map((ele, i) => (
+            <Skeleton className={styles.loading} key={i} />
+          ))}
+      </div>
+      <h1 ref={worldTrendingRef}>Trending Around the World</h1>
+      <div className={styles.HomeListSection}>
+        {filterForKids(worldTrending)?.map((ele: any) => {
+          return <MovieCardSmall data={ele} media_type="movie" />;
+        })}
+        {worldTrending?.length === 0 &&
+          dummyList.map((ele, i) => (
+            <Skeleton className={styles.loading} key={i} />
+          ))}
+      </div>
       {recommendations.length > 0 ? (
         <>
           <h1>Recommendation</h1>
@@ -416,6 +520,19 @@ const HomeListAll = () => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {popularTv?.length === 0 &&
+          dummyList.map((ele, i) => (
+            <Skeleton className={styles.loading} key={i} />
+          ))}
+      </div>
+      <h1 ref={regionPopularTvRef}>
+        Popular Shows in {geo?.regionName || "Your Region"}
+      </h1>
+      <div className={styles.HomeListSection}>
+        {geo &&
+          filterForKids(regionPopularTv)?.map((ele: any) => {
+            return <MovieCardSmall data={ele} media_type="tv" />;
+          })}
+        {(!geo || regionPopularTv?.length === 0) &&
           dummyList.map((ele, i) => (
             <Skeleton className={styles.loading} key={i} />
           ))}

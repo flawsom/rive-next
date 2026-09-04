@@ -17,6 +17,7 @@ import axiosFetch from "@/Utils/fetchBackend";
 import { getHistoryEntries } from "@/Utils/watchHistory";
 import { getContinueWatchingEntries } from "@/Utils/continueWatching";
 import { getRecentSearches } from "@/Utils/searchHistory";
+import { fetchGeo } from "@/Utils/geo";
 
 const IMG_BASE =
   process.env.NEXT_PUBLIC_TMBD_IMAGE_URL || "https://image.tmdb.org/t/p/w500";
@@ -254,12 +255,36 @@ export async function getRecommendations(options?: {
     }
   }
 
-  // 3. Cold-start fallback: trending today (still real, still fresh).
+  // 3. Cold-start fallback: the visitor's regional chart first (a new user in
+  // India should see India's hits, not US ones), then worldwide trending.
   if (scored.length < limit) {
     try {
-      const trend: any = await axiosFetch({ requestID: "trending" });
-      for (const r of trend?.results || []) {
-        push(toRecommendation(r, "Trending today on Rive", 0.35));
+      const geo = await fetchGeo();
+      const country = geo.source === "fallback" ? null : geo.country;
+      if (country) {
+        try {
+          const regional: any = await axiosFetch({
+            requestID: "regionTrendingMovie",
+            country,
+          });
+          for (const r of regional?.results || []) {
+            push(
+              toRecommendation(
+                r,
+                `Popular in ${geo.regionName || country} right now`,
+                0.4,
+              ),
+            );
+          }
+        } catch {
+          // Regional chart hiccup — worldwide trending below still covers it.
+        }
+      }
+      if (scored.length < limit) {
+        const trend: any = await axiosFetch({ requestID: "trending" });
+        for (const r of trend?.results || []) {
+          push(toRecommendation(r, "Trending today on Open Stream", 0.35));
+        }
       }
     } catch {
       // TMDB unreachable and no local signal — caller gets an empty list.

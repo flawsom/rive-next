@@ -19,6 +19,7 @@ import {
   getBookmarks,
 } from "@/Utils/bookmark";
 import { navigatorShare } from "@/Utils/share";
+import { safeDetailHref, safeWatchHref } from "@/Utils/safeLinks";
 import Skeleton from "react-loading-skeleton";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/Utils/firebase";
@@ -103,8 +104,9 @@ const HomeHero = () => {
     setBookmarked(!bookmarked);
   };
   const handleShare = () => {
-    const url = `/detail?type=${data[index].media_type}&id=${data[index].id}`;
-    navigatorShare({ text: data[index].title, url: url });
+    const url = safeDetailHref(data[index]);
+    if (!url) return;
+    navigatorShare({ text: data[index].title, url });
   };
   return (
     <div className={styles.HomeHero}>
@@ -153,7 +155,7 @@ const HomeHero = () => {
               <>
                 <Link
                   className={styles.links}
-                  href={`${data[index]?.media_type === "movie" ? `/watch?type=${data[index]?.media_type}&id=${data[index]?.id}` : `/watch?type=${data[index]?.media_type}&id=${data[index]?.id}&season=1&episode=1`}`}
+                  href={safeWatchHref(data[index]) || "#"}
                   data-tooltip-id="tooltip"
                   data-tooltip-content="Watch Online"
                 >
@@ -161,7 +163,10 @@ const HomeHero = () => {
                 </Link>
                 <Link
                   className={`${styles.links} ${styles.downloadBtn}`}
-                  href={`${data[index]?.media_type === "movie" ? `/watch?type=${data[index]?.media_type}&id=${data[index]?.id}&source=download` : `/watch?type=${data[index]?.media_type}&id=${data[index]?.id}&season=1&episode=1&source=download`}`}
+                  href={
+                    safeWatchHref(data[index], undefined, { download: true }) ||
+                    "#"
+                  }
                   data-tooltip-id="tooltip"
                   data-tooltip-content="Download"
                 >
@@ -169,7 +174,7 @@ const HomeHero = () => {
                 </Link>
                 <Link
                   className={styles.links}
-                  href={`/detail?type=${data[index]?.media_type}&id=${data[index]?.id}`}
+                  href={safeDetailHref(data[index]) || "#"}
                   data-tooltip-id="tooltip"
                   data-tooltip-content="Know More"
                 >

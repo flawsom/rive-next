@@ -39,7 +39,17 @@ const DetailPage = () => {
   const [trailer, setTrailer] = useState<any>("");
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [user, setUser] = useState<any>();
+
+  // A link with a missing/invalid type or id (e.g. /detail?type=undefined&id=undefined)
+  // must never spin forever — resolve it to a friendly not-found state instead.
+  const paramsValid =
+    (type === "movie" || type === "tv") &&
+    !!id &&
+    id !== "undefined" &&
+    id !== "null" &&
+    /^\d+$/.test(id as string);
 
   // Close the trailer modal on Escape; cleanup the key listener.
   useEffect(() => {
@@ -58,10 +68,23 @@ const DetailPage = () => {
 
   useEffect(() => {
     setLoading(true);
-    setType(params.get("type"));
-    setId(params.get("id"));
+    setNotFound(false);
+    const rawType = params.get("type");
+    const rawId = params.get("id");
+    setType(rawType);
+    setId(rawId);
     setSeason(params.get("season"));
     setEpisode(params.get("episode"));
+    const typeOk = rawType === "movie" || rawType === "tv";
+    const idOk = !!rawId && /^\d+$/.test(rawId);
+    if (!typeOk || !idOk) {
+      // Bad link: show the not-found state immediately instead of endless skeletons.
+      setData({});
+      setImages([]);
+      setLoading(false);
+      setNotFound(true);
+      return;
+    }
     const fetchData = async () => {
       try {
         const data = await axiosFetch({ requestID: `${type}Data`, id: id });
@@ -90,7 +113,11 @@ const DetailPage = () => {
         setImages(arr);
         setLoading(false);
       } catch (error) {
-        // console.error("Error fetching data:", error);
+        // Failed lookup (bad id, deleted title, network) → not-found, never an eternal skeleton.
+        setData({});
+        setImages([]);
+        setLoading(false);
+        setNotFound(true);
       }
       // finally {
       //   const data = await axiosFetch({ requestID: `${type}Data`, id: id });
@@ -147,6 +174,40 @@ const DetailPage = () => {
     navigatorShare({ text: data.title, url: url });
   };
 
+  if (notFound && !loading) {
+    return (
+      <div className={styles.DetailPage}>
+        <div
+          style={{
+            minHeight: "70vh",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "1rem",
+            textAlign: "center",
+            padding: "2rem",
+          }}
+        >
+          <h1 style={{ fontSize: "1.8rem", margin: 0 }}>
+            This title isn&#39;t available
+          </h1>
+          <p style={{ opacity: 0.7, maxWidth: 420 }}>
+            The link you followed is broken or the title no longer exists.
+          </p>
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <Link className={styles.links} href="/">
+              Go Home
+            </Link>
+            <Link className={styles.links} href="/search">
+              Search Titles
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     // carousel
     // detail
@@ -189,9 +250,9 @@ const DetailPage = () => {
             </h1>
             <div className={styles.HomeHeroMetaRow2}>
               <p className={styles.type}>
-                {data ? (type == "movie" ? "MOVIE" : "SHOW") : null}
+                {data?.id ? (type == "movie" ? "MOVIE" : "SHOW") : null}
               </p>
-              {data ? (
+              {data?.id ? (
                 <>
                   <Link
                     className={styles.links}

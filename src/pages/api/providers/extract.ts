@@ -182,15 +182,35 @@ export default async function handler(
         ? `${baseUrl}/tv/${id}/${season}/${episode}`
         : `${baseUrl}/tv/${id}`;
 
-  if (!isPublicHostname(new URL(embedUrl).hostname)) {
+  // The watch page may pass a title-resolved page URL (from /api/providers/resolve).
+  // WordPress-class providers do not expose /movie/{tmdbId} routes — scraping
+  // the naive URL guarantees zero streams, so the resolved page wins when given.
+  let primaryUrl = embedUrl;
+  const clientPageUrl =
+    typeof req.query.pageUrl === "string" ? req.query.pageUrl.trim() : "";
+  if (clientPageUrl) {
+    try {
+      const parsed = new URL(clientPageUrl);
+      if (
+        /^https?:$/.test(parsed.protocol) &&
+        isPublicHostname(parsed.hostname)
+      ) {
+        primaryUrl = clientPageUrl;
+      }
+    } catch {
+      // ignore malformed pageUrl, keep naive embed
+    }
+  }
+
+  if (!isPublicHostname(new URL(primaryUrl).hostname)) {
     return res.status(400).json({ error: "Embed host not allowed" });
   }
 
   const deadline = Date.now() + 45_000;
   const candidates: StreamCandidate[] = [];
 
-  // 1) The embed page itself.
-  const html = await fetchPage(embedUrl, 12_000);
+  // 1) The resolved provider page itself.
+  const html = await fetchPage(primaryUrl, 12_000);
   if (html) candidates.push(...extractFromHtml(html));
 
   // 2) iframe sources inside the page → fetch those too (common pattern).
@@ -202,7 +222,7 @@ export default async function handler(
       const srcMatch = tag.match(/src=["']([^"']+)["']/i);
       if (!srcMatch) continue;
       try {
-        const resolved = new URL(srcMatch[1], embedUrl).toString();
+        const resolved = new URL(srcMatch[1], primaryUrl).toString();
         if (
           /^https?:/i.test(resolved) &&
           isPublicHostname(new URL(resolved).hostname)
@@ -252,7 +272,7 @@ export default async function handler(
 
   return res.status(200).json({
     provider: providerId,
-    embedUrl,
+    embedUrl: primaryUrl,
     count: unique.length,
     streams: unique,
     extractedAt: Date.now(),

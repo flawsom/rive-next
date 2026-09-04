@@ -1,6 +1,7 @@
 import { useState } from "react";
 import styles from "./style.module.scss";
 import Link from "next/link";
+import { safeDetailHref } from "@/Utils/safeLinks";
 // import { motion, AnimatePresence } from "framer-motion";
 // import Skeleton from "react-loading-skeleton";
 
@@ -18,9 +19,11 @@ const MovieCardSmall = ({
 }: any) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [imagePlaceholder, setImagePlaceholder] = useState(false);
-  const link = customHref
-    ? customHref
-    : `${media_type === "collection" ? `/collections/${data?.id}` : `/detail?type=${media_type}&id=${data?.id}`}`;
+  // Never render a dead link: if id/type are missing the card is not clickable
+  // (prevents /detail?type=undefined&id=undefined dead ends).
+  const link = customHref || safeDetailHref(data, media_type);
+  if (!link)
+    return <div className={styles.MovieCardSmall} aria-hidden="true" />;
   return (
     <Link
       key={data?.id}

@@ -31,6 +31,8 @@ import {
   Provider,
   findProviderById,
   getProviderQualityTier,
+  getProvidersByCategory,
+  ALL_PROVIDERS,
 } from "@/Utils/providers";
 import {
   resolveStreamUrl,
@@ -217,6 +219,13 @@ const Watch = () => {
           setNextSeasonMinEpisodes(nextseasonData?.episodes[0]?.episode_number);
       }
     };
+    if (type === "movie") {
+      // Movies need metadata too (title/share/download naming/resume) — the
+      // previous guard left `data` empty for every movie on this page.
+      axiosFetch({ requestID: "movieData", id: id })
+        .then((res: any) => setdata(res))
+        .catch(() => {});
+    }
     if (type === "tv") fetch();
 
     const handleKeyDown = (event: any) => {
@@ -297,10 +306,90 @@ const Watch = () => {
   useEffect(() => {
     setStreamOverride(null); // new source/episode → drop any extracted stream
   }, [currentProvider, id, season, episode]);
+
+  // ─── Title-based page resolution ────────────────────────────────────────
+  // WordPress-class providers (HDHub4U, MoviesDrive, Bollyflix, …) don't
+  // expose /movie/{tmdbId} routes — those URLs 404 while still firing onLoad,
+  // which is why "nothing ever plays". /api/providers/resolve verifies the
+  // page exists (id route first, then a title search) before we mount it.
+  const [resolvedPage, setResolvedPage] = useState<{
+    url: string;
+    method: string;
+  } | null>(null);
+  const [resolveState, setResolveState] = useState<
+    "idle" | "loading" | "ok" | "miss"
+  >("idle");
+  const resolveFailHandledRef = useRef(false);
+
+  useEffect(() => {
+    setResolvedPage(null);
+    setResolveState("idle");
+    resolveFailHandledRef.current = false;
+  }, [currentProvider, id, season, episode, domainVersion]);
+
+  useEffect(() => {
+    if (!currentProvider || !id || !type) return;
+    const title = data?.title || data?.name;
+    if (!title) return; // TMDB metadata lands in a moment; then we resolve
+    let cancelled = false;
+    const controller = new AbortController();
+    setResolveState("loading");
+    const p = new URLSearchParams({
+      providerId: currentProvider.id,
+      type,
+      id: String(id),
+      base: getCachedDomain(currentProvider.id) || "",
+      title: String(title),
+      year: String(data?.release_date || data?.first_air_date || "").slice(
+        0,
+        4,
+      ),
+    });
+    if (season) p.set("season", season);
+    if (episode) p.set("episode", episode);
+    fetch(`/api/providers/resolve?${p}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("resolve"))))
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.ok && res.url) {
+          setResolvedPage({ url: res.url, method: res.method });
+          setResolveState("ok");
+        } else {
+          // Verified miss: this provider genuinely doesn't have the title.
+          // Fail fast into the auto-switch pipeline instead of hanging 30s.
+          setResolveState("miss");
+          if (!resolveFailHandledRef.current) {
+            resolveFailHandledRef.current = true;
+            iframeErrorRef.current?.();
+          }
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setResolveState("miss"); // watchdog covers the rest
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    currentProvider,
+    id,
+    type,
+    season,
+    episode,
+    data?.id,
+    data?.title,
+    data?.name,
+    domainVersion,
+  ]);
+
   const streamUrl = useMemo(() => {
     if (streamOverride) return streamOverride;
+    if (resolvedPage?.url) return resolvedPage.url;
     if (!currentProvider) return null;
-    // Use autonomous domain resolver for the best working URL
+    // Naive id-based URL — last resort for id-routed providers; the resolver
+    // above replaces it with a verified page for search-based providers.
     return resolveStreamUrl(
       currentProvider.id,
       type as "movie" | "tv",
@@ -316,6 +405,7 @@ const Watch = () => {
     episode,
     domainVersion,
     streamOverride,
+    resolvedPage,
   ]);
 
   // ─── Playback mode detection ───────────────────────────────────────────────
@@ -387,6 +477,7 @@ const Watch = () => {
     });
     if (season) params.set("season", season);
     if (episode) params.set("episode", episode);
+    if (resolvedPage?.url) params.set("pageUrl", resolvedPage.url);
     const run = async () => {
       try {
         const res = await fetch(`/api/providers/extract?${params}`, {
@@ -432,7 +523,16 @@ const Watch = () => {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [currentProvider, id, type, season, episode, playbackMode, streamUrl]);
+  }, [
+    currentProvider,
+    id,
+    type,
+    season,
+    episode,
+    playbackMode,
+    streamUrl,
+    resolvedPage,
+  ]);
 
   // Resume position for the custom player, from continue-watching progress.
   const resumeSeconds = useMemo(() => {
@@ -490,11 +590,16 @@ const Watch = () => {
     }).catch(() => {});
   };
 
-  // Record domain success when iframe loads
+  // Record domain success when iframe loads. Store the ORIGIN (not the full
+  // resolved page URL) so the domain map stays a map of domains.
   const handleIframeLoad = useCallback(() => {
     setIframeLoading(false);
     if (currentProvider && streamUrl) {
-      recordDomainSuccess(currentProvider.id, streamUrl, 100);
+      try {
+        recordDomainSuccess(currentProvider.id, new URL(streamUrl).origin, 100);
+      } catch {
+        recordDomainSuccess(currentProvider.id, streamUrl, 100);
+      }
       recordSourceSuccess(currentProvider.id);
     }
   }, [currentProvider, streamUrl]);
@@ -519,6 +624,14 @@ const Watch = () => {
   }, [currentProvider, streamUrl, iframeLoading]);
 
   // Handle iframe load error - auto switch to next source or next domain
+  // A verified resolver miss (or repeated error) walks the category's full
+  // provider list — the "best source" API alone can return the same provider
+  // and dead-end even when other sources have the title.
+  const triedProvidersRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    triedProvidersRef.current = new Set();
+  }, [id, season, episode]);
+
   const handleIframeError = useCallback(async () => {
     if (!currentProvider) return;
 
@@ -526,6 +639,7 @@ const Watch = () => {
     // Keep resolver failures silent for consumers; the toast communicates state.
 
     recordSourceFailure(currentProvider.id);
+    triedProvidersRef.current.add(currentProvider.id);
 
     // Record domain failure in the autonomous resolver
     if (failedUrl) {
@@ -538,6 +652,41 @@ const Watch = () => {
           url: failedUrl,
         }),
       }).catch(() => {});
+    }
+
+    // 1) Try the next untried provider in this category (deterministic walk).
+    const category = getSourceCategory();
+    const candidates =
+      getProvidersByCategory(category).length > 0
+        ? getProvidersByCategory(category)
+        : ALL_PROVIDERS.filter(
+            (pr) =>
+              pr.categories.includes("movie") || pr.categories.includes("tv"),
+          );
+    const nextProvider =
+      candidates.find(
+        (pr) =>
+          pr.id !== currentProvider.id &&
+          !triedProvidersRef.current.has(pr.id) &&
+          getCachedDomain(pr.id) !== null,
+      ) ||
+      candidates.find(
+        (pr) =>
+          pr.id !== currentProvider.id && !triedProvidersRef.current.has(pr.id),
+      );
+    if (nextProvider) {
+      setPreviousProviderName(currentProvider.name);
+      setIsAutoSwitched(true);
+      setCurrentProvider(nextProvider);
+      setSelectedProviderId(nextProvider.id);
+      setIframeError(false);
+      setIframeLoading(true);
+      toast.info(`Trying ${nextProvider.name}…`, {
+        description: `${currentProvider.name} doesn't have this title`,
+        duration: 3000,
+        position: "top-center",
+      });
+      return;
     }
 
     toast.info(
@@ -568,7 +717,6 @@ const Watch = () => {
 
     // No more domains for this provider, try a different provider
     try {
-      const category = getSourceCategory();
       const providerParam = userPickedProvider.current
         ? `&providerId=${selectedProviderId}`
         : "";
@@ -712,12 +860,14 @@ const Watch = () => {
   useEffect(() => {
     if (!streamUrl || !iframeLoading || iframeError || playbackMode !== "embed")
       return;
+    // Resolution must settle first — a still-running title search isn't a hang.
+    if (resolveState === "loading" || resolveState === "idle") return;
     const timer = setTimeout(() => {
       if (document.visibilityState === "hidden") return;
       iframeErrorRef.current?.();
-    }, 30_000);
+    }, 15_000);
     return () => clearTimeout(timer);
-  }, [streamUrl, iframeLoading, iframeError, playbackMode]);
+  }, [streamUrl, iframeLoading, iframeError, playbackMode, resolveState]);
 
   // ─── Up Next auto-advance ─────────────────────────────────────────────────
   // Netflix-style: clicking next shows an "Up next" card with a countdown
@@ -768,23 +918,130 @@ const Watch = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [upNext !== null, push]);
 
-  // Handle instant download with autonomous domain resolution
-  const handleDownload = useCallback(() => {
-    if (!currentProvider) return;
-    const {
-      resolveDownloadUrl: resolveDl,
-    } = require("@/Utils/domainDiscovery");
-    const downloadUrl = resolveDl(
-      currentProvider.id,
-      type as "movie" | "tv",
-      id,
-      season ? parseInt(season) : undefined,
-      episode ? parseInt(episode) : undefined,
-    );
-    if (downloadUrl) {
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+  // ─── Real downloads ───────────────────────────────────────────────────
+  // The old handler opened `${domain}/download/{tmdbId}` — a route these
+  // providers don't have, so the button did nothing. Now: extract a direct
+  // file stream and download it through the same-origin media proxy (which
+  // makes the `download` attribute work); HLS-only sources fall back to the
+  // provider's own page, which lists its download links.
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const handleDownload = useCallback(async () => {
+    if (!currentProvider || !id || !type || downloadBusy) return;
+    setDownloadBusy(true);
+    const title = data?.title || data?.name || "open-stream-download";
+    toast.info("Finding a downloadable source…", {
+      id: "download",
+      duration: 8000,
+      position: "top-center",
+    });
+    try {
+      const p = new URLSearchParams({
+        providerId: currentProvider.id,
+        type,
+        id: String(id),
+        pageUrl: resolvedPage?.url || "",
+      });
+      if (season) p.set("season", season);
+      if (episode) p.set("episode", episode);
+      const res = await fetch(`/api/providers/extract?${p}`);
+      const payload = await res.json().catch(() => null);
+      const streams: any[] = payload?.streams || [];
+      const file =
+        streams.find((s) => s.kind === "mp4") ||
+        streams.find((s) => s.kind === "webm");
+      if (file) {
+        const safeName =
+          title
+            .replace(/[^\w\s-]/g, "")
+            .trim()
+            .slice(0, 80) || "open-stream-download";
+        const a = document.createElement("a");
+        a.href = `/api/proxy/media?url=${encodeURIComponent(file.url)}`;
+        a.download = `${safeName}.${file.kind}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        toast.success("Download started", {
+          id: "download",
+          description: `${file.kind.toUpperCase()} • ${currentProvider.name}`,
+          duration: 3000,
+          position: "top-center",
+        });
+        return;
+      }
+      const page = resolvedPage?.url || payload?.embedUrl || null;
+      if (page) {
+        window.open(page, "_blank", "noopener,noreferrer");
+        toast.info("Opened the source page", {
+          id: "download",
+          description:
+            "This source streams via HLS — pick a download quality on the opened page.",
+          duration: 5000,
+          position: "top-center",
+        });
+        return;
+      }
+      // Nothing resolvable: fall back to the provider's own search for the
+      // title — always a valid page the user can pick from.
+      const base = getCachedDomain(currentProvider.id);
+      if (base) {
+        window.open(
+          `${base.replace(/\/+$/, "")}/?s=${encodeURIComponent(title)}`,
+          "_blank",
+          "noopener,noreferrer",
+        );
+        toast.info(`Opened ${currentProvider.name} search`, {
+          id: "download",
+          description: `Pick "${title}" there to grab a download link.`,
+          duration: 5000,
+          position: "top-center",
+        });
+        return;
+      }
+      toast.error("No download source found", {
+        id: "download",
+        description: "Try a different source from the Sources menu.",
+        duration: 4000,
+        position: "top-center",
+      });
+    } catch {
+      toast.error("Download failed", {
+        id: "download",
+        description: "The source did not respond. Try another source.",
+        duration: 4000,
+        position: "top-center",
+      });
+    } finally {
+      setDownloadBusy(false);
     }
-  }, [currentProvider, type, id, season, episode]);
+  }, [
+    currentProvider,
+    type,
+    id,
+    season,
+    episode,
+    resolvedPage,
+    data,
+    downloadBusy,
+  ]);
+
+  const handleDownloadRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    handleDownloadRef.current = handleDownload;
+  }, [handleDownload]);
+
+  // Consume ?source=download (the Watch / Download buttons): run the download
+  // once the source is ready instead of doing nothing.
+  const downloadAutoRef = useRef("");
+  useEffect(() => {
+    if (!isDownloadMode || !currentProvider || !id) return;
+    // Wait until the resolver settled so the download uses the verified page.
+    if (resolveState !== "ok" && resolveState !== "miss") return;
+    const key = `${currentProvider.id}|${id}|${season || ""}|${episode || ""}`;
+    if (downloadAutoRef.current === key) return;
+    downloadAutoRef.current = key;
+    handleDownloadRef.current?.();
+  }, [isDownloadMode, currentProvider, id, season, episode, resolveState]);
 
   return (
     <div className={styles.watch}>
@@ -980,7 +1237,7 @@ const Watch = () => {
           }}
           onFail={() => {
             setIframeLoading(true);
-            handleIframeError();
+            iframeErrorRef.current?.();
           }}
         />
       )}

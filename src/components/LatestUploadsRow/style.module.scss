@@ -1,0 +1,63 @@
+.latestRow {
+  margin: 2.4rem 0 0.6rem;
+
+  h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0 0 0.9rem 2.4rem;
+    letter-spacing: -0.01em;
+  }
+
+  .rowIcon {
+    color: var(--primary, #4f8cff);
+  }
+
+  .rowHint {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.45);
+    margin-left: 0.35rem;
+    transform: translateY(2px);
+  }
+
+  .rowList {
+    display: flex;
+    gap: 0.9rem;
+    overflow-x: auto;
+    padding: 0.4rem 2.4rem 1rem;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    > * {
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+    }
+  }
+
+  .loading {
+    width: 140px;
+    height: 210px;
+    border-radius: 8px;
+  }
+
+  @media (max-width: 768px) {
+    h1 {
+      margin-left: 1rem;
+      font-size: 1.1rem;
+    }
+    .rowList {
+      padding: 0.4rem 1rem 0.8rem;
+    }
+    .loading {
+      width: 110px;
+      height: 165px;
+    }
+  }
+}

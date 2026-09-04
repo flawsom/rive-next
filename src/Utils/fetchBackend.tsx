@@ -47,6 +47,10 @@ export default async function axiosFetch({
     trendingTv: `${baseURL}?requestID=trendingTv&language=${language}&page=${page}`,
     trendingMovieDay: `${baseURL}?requestID=trendingMovieDay&language=${language}&page=${page}`,
     trendingTvDay: `${baseURL}?requestID=trendingTvDay&language=${language}&page=${page}`,
+    // Geo-aware discovery: country scopes the charts to the visitor's region.
+    regionTrendingMovie: `${baseURL}?requestID=regionTrendingMovie&country=${country || "US"}&language=${language}&page=${page}`,
+    regionTrendingTv: `${baseURL}?requestID=regionTrendingTv&country=${country || "US"}&language=${language}&page=${page}`,
+    regionPopularMovie: `${baseURL}?requestID=regionPopularMovie&country=${country || "US"}&language=${language}&page=${page}`,
     randomDiscovery: `${baseURL}?requestID=random&language=${language}&_=${Date.now()}`, // cache-busted so every tap is a new pick
     searchMulti: `${baseURL}?requestID=searchMulti&query=${query}&language=${language}&page=${page}`,
     searchKeyword: `${baseURL}?requestID=searchKeyword&query=${query}&language=${language}&page=${page}`,
