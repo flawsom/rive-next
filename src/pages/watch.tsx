@@ -15,12 +15,15 @@ import {
   BsArrowClockwise,
   BsDownload,
   BsSkipForwardFill,
+  BsShareFill,
 } from "react-icons/bs";
 import axiosFetch from "@/Utils/fetchBackend";
 import WatchDetails from "@/components/WatchDetails";
 import SourceSelector from "@/components/SourceSelector";
 import SourceMetadata from "@/components/SourceMetadata";
 import CustomPlayer from "@/components/CustomPlayer";
+import MoreLikeThis from "@/components/MoreLikeThis";
+import { navigatorShare } from "@/Utils/share";
 import { recordWatch, getHistoryEntries } from "@/Utils/watchHistory";
 import {
   Provider,
@@ -756,6 +759,21 @@ const Watch = () => {
         >
           <BsDownload />
         </div>
+        <div
+          onClick={() => {
+            const title = data?.name || data?.title || "this title";
+            navigatorShare({
+              text: `Watching "${title}" on Open Stream`,
+              url: `${window.location.origin}/watch?id=${id}&type=${type}${
+                type === "tv" && season ? `&season=${season}` : ""
+              }${type === "tv" && episode ? `&episode=${episode}` : ""}`,
+            });
+          }}
+          data-tooltip-id="tooltip"
+          data-tooltip-html="Share"
+        >
+          <BsShareFill />
+        </div>
       </div>
 
       {showSourceSelector && (
@@ -911,6 +929,8 @@ const Watch = () => {
           </div>
         </div>
       )}
+
+      {id && type && <MoreLikeThis id={id} type={type} />}
     </div>
   );
 };

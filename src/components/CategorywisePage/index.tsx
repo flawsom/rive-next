@@ -50,6 +50,12 @@ const CategorywisePage = ({ categoryDiv, categoryPage = null }: any) => {
             year: filterYear,
             sortBy: sortBy,
           });
+        } else if (category === "comingSoon") {
+          // Netflix-style "Coming Soon": TMDB's upcoming pipeline with dates.
+          data = await axiosFetch({
+            requestID: "upcomingMovie",
+            page: currentPage,
+          });
         } else if (categoryPage === "anime") {
           data = await axiosFetch({
             requestID:
@@ -145,6 +151,14 @@ const CategorywisePage = ({ categoryDiv, categoryPage = null }: any) => {
         >
           Top-Rated
         </p>
+        {categoryPage === null && categoryType === "movie" ? (
+          <p
+            className={`${category === "comingSoon" ? styles.active : styles.inactive}`}
+            onClick={() => setCategory("comingSoon")}
+          >
+            Coming Soon
+          </p>
+        ) : null}
         {categoryPage === null ? (
           <p
             className={`${category === "filter" ? styles.active : styles.inactive} ${styles.filter}`}

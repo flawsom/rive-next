@@ -5,6 +5,7 @@ import Link from "next/link";
 import Skeleton from "react-loading-skeleton";
 import MovieCardSmall from "../MovieCardSmall";
 import ContinueWatchingRow from "../ContinueWatchingRow";
+import Top10Row from "../Top10Row";
 import { getContinueWatching } from "@/Utils/continueWatching";
 import { useInView } from "react-intersection-observer";
 
@@ -308,6 +309,7 @@ const HomeListAll = () => {
   return (
     <div className={styles.HomeListAll}>
       <ContinueWatchingRow />
+      <Top10Row />
       {recommendations.length > 0 ? (
         <>
           <h1>Recommendation</h1>

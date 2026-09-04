@@ -33,6 +33,7 @@ export default async function axiosFetch({
   const requests: any = {
     latestMovie: `${baseURL}/movie/now_playing?language=${language}&page=${page}`, //nowPlayingMovie
     latestTv: `${baseURL}/tv/airing_today?language=${language}&page=${page}`, // airingTodayTv
+    upcomingMovie: `${baseURL}/movie/upcoming?language=${language}&page=${page}`, // Coming Soon
     popularMovie: `${baseURL}/movie/popular?language=${language}&page=${page}&sort_by=${sortBy}`, // current popular, so similar to latestMovie data
     popularTv: `${baseURL}/tv/popular?language=${language}&page=${page}&sort_by=${sortBy}`,
     topRatedMovie: `${baseURL}/movie/top_rated?language=${language}&page=${page}`,

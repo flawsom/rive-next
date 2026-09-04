@@ -6,6 +6,7 @@ import { setPrivateApiHeaders, withTimeout } from "@/Utils/apiValidation";
 const ALLOWED_REQUESTS = new Set([
   "latestMovie",
   "latestTv",
+  "upcomingMovie",
   "popularMovie",
   "popularTv",
   "topRatedMovie",

@@ -1,0 +1,70 @@
+.top10Row {
+  padding: 1.5rem 1rem 0.2rem;
+  h1 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: sans-serif;
+  }
+  .rowIcon {
+    color: var(--ascent-color);
+  }
+  .rowHint {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--primary-2);
+    font-family: sans-serif;
+  }
+}
+
+.rowList {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding: 1rem 0.2rem;
+}
+
+.rankWrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+
+  // Oversized outlined rank digit, half-tucked behind the poster —
+  // the visual signature of the Netflix Top 10 row.
+  .rankNumber {
+    font-size: 7rem;
+    line-height: 0.8;
+    font-weight: 900;
+    font-family: sans-serif;
+    color: var(--primary-3);
+    -webkit-text-stroke: 2px var(--ascent-color);
+    margin-right: -1.1rem;
+    z-index: 0;
+    user-select: none;
+  }
+
+  // poster sits above the digit
+  > div:last-child {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+.loading {
+  min-height: 15rem;
+  width: 10rem;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 769px) {
+  .rankWrap .rankNumber {
+    font-size: 5rem;
+    margin-right: -0.8rem;
+  }
+  .loading {
+    min-height: 10rem;
+    width: 7rem;
+  }
+}
