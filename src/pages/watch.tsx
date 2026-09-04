@@ -23,6 +23,7 @@ import SourceSelector from "@/components/SourceSelector";
 import SourceMetadata from "@/components/SourceMetadata";
 import CustomPlayer from "@/components/CustomPlayer";
 import MoreLikeThis from "@/components/MoreLikeThis";
+import WatchParty from "@/components/WatchParty";
 import { navigatorShare } from "@/Utils/share";
 import { recordWatch, getHistoryEntries } from "@/Utils/watchHistory";
 import {
@@ -813,6 +814,27 @@ const Watch = () => {
           previousProvider={previousProviderName}
         />
       )}
+
+      {/* Watch Party — sync playback with friends (direct playback only) */}
+      <WatchParty
+        mediaType={type as "movie" | "tv"}
+        mediaId={id || ""}
+        season={season ? parseInt(season) : undefined}
+        episode={episode ? parseInt(episode) : undefined}
+        title={data?.name || data?.title}
+        directPlayback={playbackMode === "direct"}
+        onHostCommand={(playing, positionSeconds) => {
+          const video = document.querySelector("video");
+          if (!video) return;
+          try {
+            video.currentTime = positionSeconds;
+            if (playing) video.play().catch(() => {});
+            else video.pause();
+          } catch {
+            // Player not ready — the next host event will resync.
+          }
+        }}
+      />
 
       <div className={`${styles.loader} skeleton`}></div>
 

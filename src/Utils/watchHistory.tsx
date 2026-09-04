@@ -5,6 +5,7 @@
 import { auth } from "./firebase";
 import { pushFbHistory, fetchFbHistory } from "./firebaseUser";
 import { migrateLegacyStorageKeys } from "./storageMigration";
+import { getScopedKey } from "./profiles";
 
 export interface HistoryEntry {
   type: "movie" | "tv";
@@ -25,7 +26,9 @@ function loadRaw(): any {
   if (typeof localStorage === "undefined") return null;
   migrateLegacyStorageKeys();
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    return JSON.parse(
+      localStorage.getItem(getScopedKey(STORAGE_KEY)) || "null",
+    );
   } catch {
     return null;
   }
@@ -34,7 +37,7 @@ function loadRaw(): any {
 function saveRaw(value: any): void {
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    localStorage.setItem(getScopedKey(STORAGE_KEY), JSON.stringify(value));
   } catch {
     // Storage unavailable — in-memory only.
   }

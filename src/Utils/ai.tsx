@@ -578,3 +578,71 @@ Prefer titles that actually exist (real films/series, any era). Return ONLY vali
     };
   }
 }
+
+/**
+ * Weekly digest: a short, personal recap of what the viewer watched plus a
+ * nudge for the weekend. Powered by the same gateway model; falls back to a
+ * deterministic summary when the AI layer is unavailable.
+ */
+export async function generateWeeklyDigest(viewingProfile: {
+  watchedTitles: { title: string; type: string; genres: string[] }[];
+  totalMinutes: number;
+  topGenres: string[];
+}): Promise<{
+  headline: string;
+  recap: string;
+  pick: { title: string; reason: string } | null;
+}> {
+  const fallback = {
+    headline: "Your week on Open Stream",
+    recap: `You spent ${Math.round(viewingProfile.totalMinutes)} minutes watching ${viewingProfile.watchedTitles.length} title${viewingProfile.watchedTitles.length === 1 ? "" : "s"}${viewingProfile.topGenres.length ? `, mostly ${viewingProfile.topGenres.slice(0, 2).join(" and ")}` : ""}.`,
+    pick: null as { title: string; reason: string } | null,
+  };
+  if (viewingProfile.watchedTitles.length === 0) return fallback;
+
+  const prompt = `Write a short weekly viewing digest for this streamer:
+
+Titles watched this week:
+${viewingProfile.watchedTitles
+  .slice(0, 10)
+  .map((w) => `- "${w.title}" (${w.type}, ${w.genres.slice(0, 3).join(", ")})`)
+  .join("\n")}
+
+Total watch time: ${Math.round(viewingProfile.totalMinutes)} minutes
+Top genres: ${viewingProfile.topGenres.join(", ")}
+
+Provide a JSON response with:
+- headline: a fun 4-8 word personalized headline (no quotes around it)
+- recap: 2-3 sentences summarizing their week and what it says about their taste
+- pick: { title, reason } — ONE real movie/series (any era) they should start this weekend, with a 1-sentence reason tied to their week. Return ONLY valid JSON, no markdown.`;
+
+  try {
+    const content = await chatComplete({
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a witty but concise streaming editor writing a weekly digest. Respond with valid JSON only.",
+        },
+        { role: "user", content: prompt },
+      ],
+      maxTokens: 2500,
+      temperature: 0.8,
+    });
+    const parsed = extractJsonObject(content);
+    if (!parsed) return fallback;
+    return {
+      headline: String(parsed.headline || fallback.headline).slice(0, 80),
+      recap: String(parsed.recap || fallback.recap).slice(0, 600),
+      pick:
+        parsed.pick && typeof parsed.pick === "object" && parsed.pick.title
+          ? {
+              title: String(parsed.pick.title).slice(0, 120),
+              reason: String(parsed.pick.reason || "").slice(0, 300),
+            }
+          : null,
+    };
+  } catch {
+    return fallback;
+  }
+}

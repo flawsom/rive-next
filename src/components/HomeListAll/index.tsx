@@ -7,6 +7,7 @@ import MovieCardSmall from "../MovieCardSmall";
 import ContinueWatchingRow from "../ContinueWatchingRow";
 import Top10Row from "../Top10Row";
 import { getContinueWatching } from "@/Utils/continueWatching";
+import { filterForKids, PROFILE_CHANGED_EVENT } from "@/Utils/profiles";
 import { useInView } from "react-intersection-observer";
 
 const externalImageLoader = ({ src }: { src: string }) =>
@@ -28,6 +29,13 @@ function shuffle(array: any) {
 
 const dummyList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const HomeListAll = () => {
+  const [, setProfileTick] = useState(0);
+  useEffect(() => {
+    const onProfileChange = () => setProfileTick((t) => t + 1);
+    window.addEventListener(PROFILE_CHANGED_EVENT, onProfileChange);
+    return () =>
+      window.removeEventListener(PROFILE_CHANGED_EVENT, onProfileChange);
+  }, []);
   const [latestMovie, setLatestMovie] = useState([]);
   const [latestTv, setLatestTv] = useState([]);
   const [latestKoreanDrama, setLatestKoreanDrama] = useState([]);
@@ -319,7 +327,7 @@ const HomeListAll = () => {
             data-tooltip-content="recommendation based on what you have watched!"
           >
             {recommendations[0] !== undefined &&
-              recommendations?.map((ele: any, i) => {
+              filterForKids(recommendations)?.map((ele: any, i) => {
                 return i < 20 ? (
                   <MovieCardSmall data={ele} media_type={ele?.media_type} />
                 ) : null;
@@ -333,7 +341,7 @@ const HomeListAll = () => {
       ) : null}
       <h1 ref={latestMovieRef}>Latest Movies</h1>
       <div className={styles.HomeListSection}>
-        {latestMovie?.map((ele) => {
+        {filterForKids(latestMovie)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="movie" />;
         })}
         {latestMovie?.length === 0 &&
@@ -343,7 +351,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={latestTvRef}>Latest TV Shows</h1>
       <div className={styles.HomeListSection}>
-        {latestTv?.map((ele) => {
+        {filterForKids(latestTv)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {latestTv?.length === 0 &&
@@ -353,7 +361,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={latestKoreanDramaRef}>Latest K-Dramas</h1>
       <div className={styles.HomeListSection}>
-        {latestKoreanDrama?.map((ele) => {
+        {filterForKids(latestKoreanDrama)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {latestKoreanDrama?.length === 0 &&
@@ -363,7 +371,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={popularKoreanDramaRef}>Popular K-Dramas</h1>
       <div className={styles.HomeListSection}>
-        {popularKoreanDrama?.map((ele) => {
+        {filterForKids(popularKoreanDrama)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {popularKoreanDrama?.length === 0 &&
@@ -373,7 +381,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={latestAnimeRef}>Latest Anime</h1>
       <div className={styles.HomeListSection}>
-        {latestAnime?.map((ele) => {
+        {filterForKids(latestAnime)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {latestAnime?.length === 0 &&
@@ -383,7 +391,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={popularAnimeRef}>Popular Anime</h1>
       <div className={styles.HomeListSection}>
-        {popularAnime?.map((ele) => {
+        {filterForKids(popularAnime)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {popularAnime?.length === 0 &&
@@ -393,7 +401,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={popularMovieRef}>Popular Movies</h1>
       <div className={styles.HomeListSection}>
-        {popularMovie?.map((ele) => {
+        {filterForKids(popularMovie)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="movie" />;
         })}
         {popularMovie?.length === 0 &&
@@ -403,7 +411,7 @@ const HomeListAll = () => {
       </div>
       <h1 ref={popularTvRef}>Popular TV Shows</h1>
       <div className={styles.HomeListSection}>
-        {popularTv?.map((ele) => {
+        {filterForKids(popularTv)?.map((ele: any) => {
           return <MovieCardSmall data={ele} media_type="tv" />;
         })}
         {popularTv?.length === 0 &&

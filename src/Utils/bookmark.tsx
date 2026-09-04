@@ -10,8 +10,9 @@ import {
   removeFromFbWatchlist,
 } from "./firebaseUser";
 import { migrateLegacyStorageKeys } from "./storageMigration";
+import { getScopedKey } from "./profiles";
 
-const WATCHLIST_KEY = "OpenStreamWatchlist";
+const watchlistKey = () => getScopedKey("OpenStreamWatchlist");
 
 export const getBookmarks = (userId: any) => {
   // console.log({ userId });
@@ -20,7 +21,7 @@ export const getBookmarks = (userId: any) => {
     return fetchFbWatchlist({ userID: userId });
   } else {
     migrateLegacyStorageKeys();
-    const values: any = localStorage.getItem(WATCHLIST_KEY);
+    const values: any = localStorage.getItem(watchlistKey());
     return JSON.parse(values);
   }
   return {};
@@ -36,7 +37,7 @@ export const setBookmarks = ({ userId = null, type, id }: any) => {
       values[type]?.push(id);
       values[type] = values[type].reverse();
       migrateLegacyStorageKeys();
-      localStorage.setItem(WATCHLIST_KEY, JSON.stringify(values));
+      localStorage.setItem(watchlistKey(), JSON.stringify(values));
     }
   }
 };
@@ -48,7 +49,7 @@ export const removeBookmarks = ({ userId = null, type, id }: any) => {
     var values: any = getBookmarks(userId) || { movie: [], tv: [] };
     if (values[type]?.includes(id)) {
       values[type] = values[type].filter((ele: any) => ele !== id); // Update the array after filtering
-      return localStorage.setItem(WATCHLIST_KEY, JSON.stringify(values));
+      return localStorage.setItem(watchlistKey(), JSON.stringify(values));
     }
   }
 };

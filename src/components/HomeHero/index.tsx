@@ -22,6 +22,7 @@ import { navigatorShare } from "@/Utils/share";
 import Skeleton from "react-loading-skeleton";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/Utils/firebase";
+import HeroTrailer from "../HeroTrailer";
 
 const externalImageLoader = ({ src }: { src: string }) =>
   `${process.env.NEXT_PUBLIC_TMBD_IMAGE_URL}${src}`;
@@ -118,6 +119,10 @@ const HomeHero = () => {
         ) : (
           <Skeleton className={styles.CarouselLoading} />
         )}
+        {/* Muted trailer preview behind the hero overlay (desktop only) */}
+        {data[index] ? (
+          <HeroTrailer id={data[index].id} type={data[index].media_type} />
+        ) : null}
         <div className={styles.curvy}></div>
         <div className={styles.curvy2}></div>
         <div className={styles.curvy3}></div>

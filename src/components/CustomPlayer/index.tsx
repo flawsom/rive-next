@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
+import {
+  setMediaMetadata,
+  setMediaHandlers,
+  updatePositionState,
+  setPlaybackState,
+} from "@/Utils/mediaSession";
 import styles from "./style.module.scss";
 import {
   BsPlayFill,
@@ -237,6 +243,11 @@ const CustomPlayer = ({
     video.addEventListener("loadeddata", () => setWaiting(false));
     video.addEventListener("timeupdate", () => {
       setCurrent(video.currentTime);
+      updatePositionState(
+        video.currentTime,
+        video.playbackRate,
+        video.duration || 0,
+      );
       if (video.currentTime - lastProgressRef.current >= 5) {
         lastProgressRef.current = video.currentTime;
         onProgress?.(video.currentTime, video.duration || 0);
@@ -257,16 +268,44 @@ const CustomPlayer = ({
       onFail?.("Playback error");
     });
 
+    // ─── OS media integration (lockscreen / media flyout) ───────────────────
+    if (title) {
+      setMediaMetadata({
+        title,
+        artworkUrl: poster
+          ? `/api/proxy/image?url=${encodeURIComponent(poster)}`
+          : undefined,
+      });
+    }
+    setMediaHandlers({
+      onPlay: () => video.play().catch(() => {}),
+      onPause: () => video.pause(),
+      onSeekBackward: () => {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      },
+      onSeekForward: () => {
+        video.currentTime = Math.min(
+          video.duration || 0,
+          video.currentTime + 10,
+        );
+      },
+      onSeekTo: (seconds) => {
+        video.currentTime = Math.min(Math.max(0, seconds), video.duration || 0);
+      },
+    });
+
     return () => {
       destroyed = true;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      setPlaybackState("none");
+      setMediaHandlers({});
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, startSeconds, onEnded, onFail, onProgress]);
+  }, [src, startSeconds, onEnded, onFail, onProgress, title, poster]);
 
   // ─── Subtitle tracks ──────────────────────────────────────────────────────
   const addSubtitleTrack = useCallback(async (label: string, url: string) => {
@@ -432,6 +471,11 @@ const CustomPlayer = ({
     else video.pause();
     pokeControls();
   }, [pokeControls]);
+
+  // Reflect play/pause into the OS media session.
+  useEffect(() => {
+    setPlaybackState(playing ? "playing" : "paused");
+  }, [playing]);
 
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;

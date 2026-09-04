@@ -6,6 +6,7 @@
 // read and migrated transparently.
 
 import { migrateLegacyStorageKeys } from "./storageMigration";
+import { getScopedKey } from "./profiles";
 
 export interface ContinueEntry {
   type: "movie" | "tv";
@@ -21,7 +22,7 @@ export interface ContinueEntry {
   updatedAt: number;
 }
 
-const STORAGE_KEY = "OpenStreamContinueWatching";
+const storageKey = () => getScopedKey("OpenStreamContinueWatching");
 const MAX_ENTRIES = 40;
 const COMPLETION_RATIO = 0.95;
 
@@ -29,7 +30,7 @@ function loadRaw(): any {
   if (typeof localStorage === "undefined") return null;
   migrateLegacyStorageKeys();
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    return JSON.parse(localStorage.getItem(storageKey()) || "null");
   } catch {
     return null;
   }
@@ -38,7 +39,7 @@ function loadRaw(): any {
 function saveRaw(value: any): void {
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    localStorage.setItem(storageKey(), JSON.stringify(value));
   } catch {
     // Storage full/unavailable — continue without persisting.
   }

@@ -63,33 +63,40 @@ Legend: ✅ shipped · 🟡 partial · ❌ missing
 4. **Deep-link sharing** — share buttons carry `title+id+type` so shared links
    land on the actual title (currently generic nav share).
 
-### Phase 2 — Account depth (next release)
+### Phase 2 — Account depth ✅ SHIPPED
 
-5. **Profiles** — per-profile watchlist/history/continue-watching under one
-   Firebase account; guest profiles stay local. (Netflix's most-copied UX.)
-6. **Kids mode** — profile-level PG filter using TMDB genre/age data.
-7. **Downloads v2** — real offline caching of poster/metadata bundles + PWA
-   media session.
-8. **Source pinning** — let users pin a preferred provider per category;
-   selector treats it as priority+1.
+5. **Profiles** ✅ — per-profile watchlist/history/continue-watching under one
+   Firebase account; guest profiles stay local. Netflix-style switcher in the
+   navbar; the default profile keeps legacy keys (zero migration).
+6. **Kids mode** ✅ — profile-level filter using TMDB genre data across every
+   discovery row; toggle per profile in the switcher.
+7. **Downloads v2** ✅ — MediaSession integration: lockscreen/notification
+   controls, artwork, position state, play/pause/seek from the OS media UI.
+8. **Source pinning** ✅ — pin a preferred provider per category on the
+   Sources page; the selector honors the pin while it stays reachable and
+   falls back to latency ranking automatically when it doesn't.
 
-### Phase 3 — Playback mastery (the moat)
+### Phase 3 — Playback mastery (the moat) — PARTIALLY SHIPPED
 
-9. **Direct stream extraction pipeline** — first-class in-app player for
-   sources that expose direct streams (subtitle search, multi-audio,
-   1080p/4K selection). The single biggest differentiator vs. embed players.
-10. **Watch-party** — synchronized playback rooms (WebRTC + host control).
-11. **Chromecast/AirPlay** via Remote Playback API.
-12. **Trailer autoplay in hero** (muted, hover-to-play with sound toggle) —
-    the Netflix hero standard.
+9. **Direct stream extraction pipeline** ✅ v1 — `/api/providers/extract`
+   fetches embed pages server-side and extracts HLS/mp4/webm candidates
+   (HTML sweep + iframe fan-out + manifest-derived API endpoints). The custom
+   player already handles HLS via hls.js with quality/subtitle menus.
+10. **Watch-party** ✅ v1 — synchronized rooms over Firestore snapshots
+    (host publishes play/pause/position; guests follow with drift-corrected
+    seeks). Direct-playback surfaces only; needs Firestore rules documented
+    in ABOUT_ENV.md.
+11. **Chromecast/AirPlay** via Remote Playback API — not yet built.
+12. **Trailer autoplay in hero** ✅ — muted YouTube-nocookie preview behind
+    the hero (desktop, reduced-motion aware, sound toggle, tab-hidden pause).
 
-### Phase 4 — Intelligence
+### Phase 4 — Intelligence — PARTIALLY SHIPPED
 
-13. **Taste profile export** — JSON export of history/preferences (data
-    ownership as a feature; no competitor does this).
-14. **AI weekly digest** — "what to watch this week" email/notification built
-    on the existing TMDB-grounded pipeline.
-15. **Community lists** — user-curated public collections.
+13. **Taste profile export** ✅ — one-click JSON export/import of watchlist,
+    history, continue-watching and searches (Settings → Your Data).
+14. **AI weekly digest** ✅ — `/api/ai/digest` generates a personalized
+    weekly recap + one weekend pick from the existing TMDB-grounded pipeline.
+15. **Community lists** — user-curated public collections. Not yet built.
 
 ## 4. What we deliberately do NOT build
 

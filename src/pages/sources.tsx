@@ -4,6 +4,8 @@ import {
   BsClockHistory,
   BsCheckCircle,
   BsExclamationTriangle,
+  BsPinAngle,
+  BsPinAngleFill,
 } from "react-icons/bs";
 import styles from "@/styles/Sources.module.scss";
 import {
@@ -24,6 +26,7 @@ import { FaMicrophone, FaServer, FaLanguage } from "react-icons/fa";
 import { RiMovie2Line, RiEye2Line } from "react-icons/ri";
 import { MdOutlineAnimation } from "react-icons/md";
 import { getProviderQualityTier } from "@/Utils/providers";
+import { getAllPinnedSources, setPinnedSource } from "@/Utils/sourceSelector";
 
 interface Provider {
   id: string;
@@ -91,6 +94,17 @@ const SourcesPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [manifestStatus, setManifestStatus] = useState<any>(null);
   const [syncing, setSyncing] = useState(false);
+  const [pins, setPins] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setPins(getAllPinnedSources());
+  }, []);
+
+  const togglePin = (category: string, providerId: string) => {
+    const isPinned = pins[category] === providerId;
+    setPinnedSource(category, isPinned ? null : providerId);
+    setPins(getAllPinnedSources());
+  };
 
   // Fetch providers on mount (useEffect — this page prerenders on the server
   // during `next build`, and a bare relative fetch there throws on Node)
@@ -236,6 +250,20 @@ const SourcesPage = () => {
               <BsStarFill /> Default
             </span>
           )}
+          {provider.categories
+            .filter((cat) => pins[cat] === provider.id)
+            .map((cat) => (
+              <span
+                key={cat}
+                className={styles.defaultTag}
+                style={{
+                  background: "rgba(79,140,255,0.16)",
+                  color: "#4f8cff",
+                }}
+              >
+                <BsPinAngleFill /> Pinned
+              </span>
+            ))}
         </div>
         <p className={styles.sourceDesc}>{provider.description}</p>
         <div className={styles.sourceBadges}>
@@ -264,6 +292,32 @@ const SourcesPage = () => {
           <span className={`${styles.badge} ${styles.repoBadge}`}>
             <FaServer /> {provider.repoSource.toUpperCase()}
           </span>
+        </div>
+        {/* Pin as preferred source for a category */}
+        <div className={styles.pinRow}>
+          {provider.categories
+            .filter((cat) =>
+              ["movie", "tv", "anime", "cartoon", "asianDrama"].includes(cat),
+            )
+            .map((cat) => {
+              const pinned = pins[cat] === provider.id;
+              return (
+                <button
+                  key={cat}
+                  className={`${styles.pinBtn} ${pinned ? styles.pinBtnActive : ""}`}
+                  onClick={() => togglePin(cat, provider.id)}
+                  aria-pressed={pinned}
+                  title={
+                    pinned
+                      ? `Unpin as preferred ${CATEGORY_CONFIG[cat]?.label || cat} source`
+                      : `Prefer this source for ${CATEGORY_CONFIG[cat]?.label || cat}`
+                  }
+                >
+                  {pinned ? <BsPinAngleFill /> : <BsPinAngle />}
+                  {CATEGORY_CONFIG[cat]?.label || cat}
+                </button>
+              );
+            })}
         </div>
       </div>
     </div>

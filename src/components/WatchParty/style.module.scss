@@ -1,0 +1,198 @@
+.wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2rem;
+  color: var(--primary-3, #e6e9f2);
+  font-size: 0.8rem;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: rgba(79, 140, 255, 0.6);
+    background: rgba(79, 140, 255, 0.1);
+  }
+}
+
+.liveDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34d399;
+  animation: pulse 1.6s ease infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 300px;
+  max-width: 92vw;
+  background: rgba(18, 22, 35, 0.97);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  z-index: 300;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.72);
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.nameRow {
+  margin-bottom: 8px;
+}
+
+.input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: #fff;
+  font-size: 0.8rem;
+  outline: none;
+
+  &:focus {
+    border-color: rgba(79, 140, 255, 0.6);
+  }
+}
+
+.codeInput {
+  width: 96px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  text-align: center;
+  font-weight: 700;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.joinRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn {
+  background: #4f8cff;
+  color: #fff;
+
+  &:hover {
+    background: #6da0ff;
+  }
+}
+
+.secondaryBtn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.16);
+  }
+}
+
+.linkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(79, 140, 255, 0.14);
+  border: 1px solid rgba(79, 140, 255, 0.4);
+  color: #4f8cff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(79, 140, 255, 0.24);
+  }
+}
+
+.leaveBtn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+  cursor: pointer;
+
+  &:hover {
+    color: #ff6b8b;
+  }
+}
+
+.code {
+  color: #4f8cff;
+  letter-spacing: 0.18em;
+  font-weight: 800;
+}
+
+.status {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 8px 0 0;
+}
+
+.error {
+  font-size: 0.75rem;
+  color: #ff6b8b;
+  margin: 8px 0 0;
+}
+
+@media (max-width: 640px) {
+  .panel {
+    position: fixed;
+    top: 64px;
+    right: 12px;
+    left: 12px;
+    min-width: 0;
+  }
+}

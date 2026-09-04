@@ -2,7 +2,13 @@ import React, { useState, useEffect } from "react";
 import styles from "@/styles/Settings.module.scss";
 import Link from "next/link";
 import { FaGithub, FaGlobe } from "react-icons/fa";
+import { toast } from "sonner";
 import { getSettings, setSettings } from "@/Utils/settings";
+import {
+  buildTasteExport,
+  downloadTasteExport,
+  importTasteData,
+} from "@/Utils/tasteProfile";
 import { usePathname } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/Utils/firebase";
@@ -181,6 +187,53 @@ const SettingsPage = ({
             Contact Us
           </Link>
           {/* <Link href="/contact">Contact Us</Link> */}
+        </div>
+        <h1>Your Data</h1>
+        <div className={styles.group}>
+          <Link
+            href=""
+            onClick={async (e) => {
+              e.preventDefault();
+              try {
+                const data = await buildTasteExport();
+                downloadTasteExport(data);
+                toast.success("Taste profile exported");
+              } catch {
+                toast.error("Export failed");
+              }
+            }}
+            data-tooltip-id="tooltip"
+            data-tooltip-content="Download watchlist, history and progress as JSON"
+          >
+            Export taste profile
+          </Link>
+          <Link
+            href=""
+            onClick={(e) => {
+              e.preventDefault();
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "application/json,.json";
+              input.onchange = async () => {
+                const file = input.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  const result = importTasteData(JSON.parse(text));
+                  toast.success(
+                    `Imported: ${result.watchlist} watchlist, ${result.history} history entries`,
+                  );
+                } catch {
+                  toast.error("Import failed — is this an Open Stream export?");
+                }
+              };
+              input.click();
+            }}
+            data-tooltip-id="tooltip"
+            data-tooltip-content="Restore from an exported JSON file"
+          >
+            Import taste profile
+          </Link>
         </div>
         <h1>Links</h1>
         <div className={styles.group}>

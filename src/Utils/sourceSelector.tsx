@@ -3,12 +3,56 @@
  * Provider entries are metadata; availability is only reported for configured endpoints.
  */
 
-import { Provider, getProvidersByCategory } from "./providers";
+import {
+  Provider,
+  getProvidersByCategory,
+  findProviderById,
+} from "./providers";
 import {
   getCachedDomain,
   recordDomainFailure,
   recordDomainSuccess,
 } from "./domainDiscovery";
+
+// ─── Source pinning (user preference) ───────────────────────────────────────
+// "OpenStreamPinnedSources" maps category -> providerId. A pinned source is
+// preferred over defaults whenever its probe reports it available; if the pin
+// is unavailable the normal latency ranking takes over automatically.
+const PINNED_KEY = "OpenStreamPinnedSources";
+
+export function getPinnedSource(category: string): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const map = JSON.parse(localStorage.getItem(PINNED_KEY) || "{}");
+    return typeof map[category] === "string" ? map[category] : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPinnedSource(
+  category: string,
+  providerId: string | null,
+): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    const map = JSON.parse(localStorage.getItem(PINNED_KEY) || "{}");
+    if (providerId) map[category] = providerId;
+    else delete map[category];
+    localStorage.setItem(PINNED_KEY, JSON.stringify(map));
+  } catch {
+    // Storage unavailable — pin applies for this session only.
+  }
+}
+
+export function getAllPinnedSources(): Record<string, string> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(PINNED_KEY) || "{}") || {};
+  } catch {
+    return {};
+  }
+}
 
 export interface SourceHealth {
   providerId: string;
@@ -143,12 +187,13 @@ export async function selectBestSource(
     }))
     .filter(({ health }) => health.available)
     .sort((a, b) => {
-      if (preferredId && a.provider.id !== b.provider.id)
-        return a.provider.id === preferredId
-          ? -1
-          : b.provider.id === preferredId
-            ? 1
-            : 0;
+      // 1. User-pinned source wins (while it stays reachable).
+      const pin = preferredId || getPinnedSource(category);
+      if (pin && a.provider.id !== b.provider.id) {
+        const aPinned = a.provider.id === pin;
+        const bPinned = b.provider.id === pin;
+        if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      }
       if (a.provider.isDefault !== b.provider.isDefault)
         return a.provider.isDefault ? -1 : 1;
       return (
@@ -186,10 +231,11 @@ export async function selectBestSourceForContent(
           ? "asianDrama"
           : type);
   // For movies/TV the default is HDHub4U or MoviesDrive, decided purely by
-  // latency and availability. Anime prefers Anichi only as the fallback anchor.
+  // latency and availability (or a user pin). Anime prefers Anichi only as
+  // the fallback anchor unless pinned otherwise.
   return selectBestSource(
     detected,
-    detected === "anime" ? "anichi" : undefined,
+    detected === "anime" && !getPinnedSource(detected) ? "anichi" : undefined,
   );
 }
 

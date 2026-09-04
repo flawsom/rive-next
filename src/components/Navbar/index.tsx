@@ -37,6 +37,7 @@ import {
 import { RiEye2Line, RiEye2Fill } from "react-icons/ri";
 import { BsStars, BsStar, BsCollectionPlay, BsShuffle } from "react-icons/bs";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
+import ProfileSwitcher from "@/components/ProfileSwitcher";
 
 const Navbar = ({ children }: any) => {
   const path = usePathname();
@@ -224,6 +225,7 @@ const Navbar = ({ children }: any) => {
         aria-label="Settings"
         data-tooltip-id="tooltip"
         data-tooltip-content="Settings"
+        className={styles.mobileHide}
       >
         {pathname === "/settings" ||
         pathname === "/downloads" ||
@@ -235,6 +237,7 @@ const Navbar = ({ children }: any) => {
           <MdOutlineSettings className={styles.inactive} />
         )}
       </Link>
+      <ProfileSwitcher />
     </div>
   );
 };
