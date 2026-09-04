@@ -8,6 +8,7 @@ import axiosFetch from "@/Utils/fetchBackend";
 // react-lazy-load-image-component
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 
 function capitalizeFirstLetter(string: string) {
   return string?.charAt(0).toUpperCase() + string?.slice(1);
@@ -68,7 +69,7 @@ const MovieCardLarge = ({ data, media_type, genresMovie, genresTv }: any) => {
         {/* <AnimatePresence mode="sync">
           <motion.img
             key={data?.id}
-            src={`${imagePlaceholder ? "/images/logo.svg" : (data?.poster_path !== null && data?.poster_path !== undefined) || (data?.profile_path !== null && data?.profile_path !== undefined) || (data?.still_path !== null && data?.still_path !== undefined) ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + (data?.poster_path || data?.profile_path || data?.still_path) || null : "/images/logo.svg"}`}
+            src={`${imagePlaceholder ? "/images/logo.svg" : (data?.poster_path !== null && data?.poster_path !== undefined) || (data?.profile_path !== null && data?.profile_path !== undefined) || (data?.still_path !== null && data?.still_path !== undefined) ? TMDB_IMAGE_URL + (data?.poster_path || data?.profile_path || data?.still_path) || null : "/images/logo.svg"}`}
             initial={{ opacity: 0 }}
             animate={{
               opacity: imageLoading ? 0 : 1,
@@ -96,7 +97,7 @@ const MovieCardLarge = ({ data, media_type, genresMovie, genresTv }: any) => {
         {/* react-lazy-load-image-component */}
         <LazyLoadImage
           key={data?.id}
-          src={`${imagePlaceholder ? "/images/logo.svg" : (data?.poster_path !== null && data?.poster_path !== undefined) || (data?.profile_path !== null && data?.profile_path !== undefined) || (data?.still_path !== null && data?.still_path !== undefined) ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + (data?.poster_path || data?.profile_path || data?.still_path) || null : "/images/logo.svg"}`}
+          src={`${imagePlaceholder ? "/images/logo.svg" : (data?.poster_path !== null && data?.poster_path !== undefined) || (data?.profile_path !== null && data?.profile_path !== undefined) || (data?.still_path !== null && data?.still_path !== undefined) ? TMDB_IMAGE_URL + (data?.poster_path || data?.profile_path || data?.still_path) || null : "/images/logo.svg"}`}
           height="100%"
           width="100%"
           useIntersectionObserver={true}

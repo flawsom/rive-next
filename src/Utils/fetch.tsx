@@ -28,8 +28,11 @@ export default async function axiosFetch({
 }: Fetch) {
   const request = requestID;
   const API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
-  const baseURL = process.env.NEXT_PUBLIC_TMDB_API;
-  const randomURL = process.env.NEXT_PUBLIC_RANDOM_URL;
+  // Default keeps the app alive if the base-URL env var is missing (e.g. a
+  // fresh deployment where only the API key was configured).
+  const baseURL =
+    process.env.NEXT_PUBLIC_TMDB_API || "https://api.themoviedb.org/3";
+  const randomURL = process.env.NEXT_PUBLIC_RANDOM_URL; // unused; kept for compat
   const requests: any = {
     latestMovie: `${baseURL}/movie/now_playing?language=${language}&page=${page}`, //nowPlayingMovie
     latestTv: `${baseURL}/tv/airing_today?language=${language}&page=${page}`, // airingTodayTv

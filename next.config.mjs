@@ -16,4 +16,28 @@ export default {
   experimental: {
     cpus: 2,
   },
+  // Speed: long-lived immutable caching for static assets and instant
+  // navigation prefetching on hover/viewport for internal links.
+  async headers() {
+    return [
+      {
+        source: "/images/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
+      {
+        source: "/api/backendfetch",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "s-maxage=300, stale-while-revalidate=1800",
+          },
+        ],
+      },
+    ];
+  },
 };

@@ -10,6 +10,7 @@ import Link from "next/link";
 import { BsShare } from "react-icons/bs";
 import { CgWebsite } from "react-icons/cg";
 import { navigatorShare } from "@/Utils/share";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 
 const PersonPage = () => {
   const params = useSearchParams();
@@ -37,8 +38,7 @@ const PersonPage = () => {
         // setImages(response.results);
         let arr: any = [];
         response.profiles.map((ele: any, i: any) => {
-          if (i < 10)
-            arr.push(process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele.file_path);
+          if (i < 10) arr.push(TMDB_IMAGE_URL + ele.file_path);
         });
         if (arr.length === 0) arr.push("/images/logo.svg");
         setImages(arr);

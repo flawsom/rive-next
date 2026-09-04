@@ -105,6 +105,9 @@ export default async function handler(
     if (result === undefined || result === null)
       return res.status(502).json({ error: "Metadata service unavailable" });
     setCache(cacheKey, result);
+    // Edge cache hot catalog data: repeat visits and nearby regions get
+    // instant responses from Vercel's CDN instead of a fresh function run.
+    res.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=1800");
     return res.status(200).json(result);
   } catch {
     return res.status(502).json({ error: "Metadata service unavailable" });

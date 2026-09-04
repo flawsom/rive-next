@@ -24,6 +24,7 @@ import SourceMetadata from "@/components/SourceMetadata";
 import CustomPlayer from "@/components/CustomPlayer";
 import MoreLikeThis from "@/components/MoreLikeThis";
 import WatchParty from "@/components/WatchParty";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 import { navigatorShare } from "@/Utils/share";
 import { recordWatch, getHistoryEntries } from "@/Utils/watchHistory";
 import {
@@ -129,8 +130,23 @@ const Watch = () => {
 
   useEffect(() => {
     const loadProvider = async () => {
+      const category = getSourceCategory();
+      // ⚡ Instant first paint: start from the last-known-good provider for
+      // this category (localStorage), so the player mounts on frame one while
+      // the health check runs. The best-source round-trip then upgrades if a
+      // faster source exists — users never stare at a spinner for this.
+      if (!userPickedProvider.current) {
+        try {
+          const lastGood = JSON.parse(
+            localStorage.getItem("OpenStreamLastGoodProvider") || "{}",
+          );
+          const cached = findProviderById(lastGood[category]);
+          if (cached && !currentProvider) setCurrentProvider(cached);
+        } catch {
+          // ignore malformed cache
+        }
+      }
       try {
-        const category = getSourceCategory();
         // Until the user picks a source manually, the default is decided purely
         // by latency/availability (HDHub4U vs MoviesDrive), not by preference.
         const providerParam = userPickedProvider.current
@@ -143,13 +159,28 @@ const Watch = () => {
           const selection = await response.json();
           setCurrentProvider(selection.provider);
           setSelectedProviderId(selection.provider.id);
+          try {
+            const lastGood = JSON.parse(
+              localStorage.getItem("OpenStreamLastGoodProvider") || "{}",
+            );
+            lastGood[category] = selection.provider.id;
+            localStorage.setItem(
+              "OpenStreamLastGoodProvider",
+              JSON.stringify(lastGood),
+            );
+          } catch {
+            // ignore
+          }
         }
       } catch (err) {
-        const fallback = findProviderById("hdhub4u");
-        if (fallback) setCurrentProvider(fallback);
+        if (!currentProvider) {
+          const fallback = findProviderById("hdhub4u");
+          if (fallback) setCurrentProvider(fallback);
+        }
       }
     };
     loadProvider();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getSourceCategory, selectedProviderId]);
 
   useEffect(() => {
@@ -927,9 +958,7 @@ const Watch = () => {
           title={data?.name || data?.title}
           poster={
             data?.backdrop_path || data?.poster_path
-              ? `${process.env.NEXT_PUBLIC_TMBD_IMAGE_URL}${
-                  data?.backdrop_path || data?.poster_path
-                }`
+              ? `${TMDB_IMAGE_URL}${data?.backdrop_path || data?.poster_path}`
               : undefined
           }
           startSeconds={resumeSeconds}

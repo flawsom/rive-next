@@ -23,9 +23,10 @@ import Skeleton from "react-loading-skeleton";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/Utils/firebase";
 import HeroTrailer from "../HeroTrailer";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 
 const externalImageLoader = ({ src }: { src: string }) =>
-  `${process.env.NEXT_PUBLIC_TMBD_IMAGE_URL}${src}`;
+  `${TMDB_IMAGE_URL}${src}`;
 
 const HomeHero = () => {
   const [data, setData] = useState<any>([]);
@@ -43,7 +44,7 @@ const HomeHero = () => {
         setData(response.results);
         let arr: any = [];
         response.results.map((ele: any) => {
-          arr.push(process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele.backdrop_path);
+          arr.push(TMDB_IMAGE_URL + ele.backdrop_path);
         });
         if (arr.length === 0) arr.push("/images/logo.svg");
         setImages(arr);

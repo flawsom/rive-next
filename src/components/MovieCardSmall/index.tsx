@@ -7,6 +7,7 @@ import Link from "next/link";
 // react-lazy-load-image-component
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
+import { TMDB_IMAGE_URL as TMDB_IMG } from "@/Utils/imageUrl";
 
 const MovieCardSmall = ({
   data,
@@ -37,7 +38,7 @@ const MovieCardSmall = ({
         {/* <AnimatePresence mode="sync">
           <motion.img
             key={data?.id}
-            src={`${imagePlaceholder ? "/images/logo.svg" : data?.poster_path !== null && data?.poster_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + data?.poster_path : "/images/logo.svg"}`}
+            src={`${imagePlaceholder ? "/images/logo.svg" : data?.poster_path !== null && data?.poster_path !== undefined ? TMDB_IMG + data?.poster_path : "/images/logo.svg"}`}
             initial={{ opacity: 0 }}
             animate={{
               opacity: imageLoading ? 0 : 1,
@@ -64,7 +65,7 @@ const MovieCardSmall = ({
         {/* react-lazy-load-image-component */}
         <LazyLoadImage
           key={data?.id}
-          src={`${imagePlaceholder ? "/images/logo.svg" : data?.poster_path !== null && data?.poster_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + data?.poster_path : "/images/logo.svg"}`}
+          src={`${imagePlaceholder ? "/images/logo.svg" : data?.poster_path !== null && data?.poster_path !== undefined ? TMDB_IMG + data?.poster_path : "/images/logo.svg"}`}
           height="100%"
           width="100%"
           useIntersectionObserver={true}

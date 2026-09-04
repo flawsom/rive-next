@@ -12,6 +12,7 @@ import { AiFillLeftCircle, AiFillRightCircle } from "react-icons/ai";
 // react-lazy-load-image-component
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 
 function capitalizeFirstLetter(string: string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
@@ -217,7 +218,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                         {/* <AnimatePresence mode="sync">
                           <motion.img
                             key={ele?.id}
-                            src={`${ele?.still_path !== null && ele?.still_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele?.still_path : "/images/logo.svg"}`}
+                            src={`${ele?.still_path !== null && ele?.still_path !== undefined ? TMDB_IMAGE_URL + ele?.still_path : "/images/logo.svg"}`}
                             initial={{ opacity: 0 }}
                             animate={{
                               opacity: imageLoading ? 0 : 1,
@@ -237,7 +238,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                         {/* react-lazy-load-image-component */}
                         <LazyLoadImage
                           key={ele?.id}
-                          src={`${imagePlaceholder ? "/images/logo.svg" : ele?.still_path !== null && ele?.still_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele?.still_path : "/images/logo.svg"}`}
+                          src={`${imagePlaceholder ? "/images/logo.svg" : ele?.still_path !== null && ele?.still_path !== undefined ? TMDB_IMAGE_URL + ele?.still_path : "/images/logo.svg"}`}
                           height="100%"
                           width="100%"
                           useIntersectionObserver={true}
@@ -446,7 +447,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                         {/* <AnimatePresence mode="sync">
                           <motion.img
                             key={ele?.id}
-                            src={`${ele?.profile_path !== null && ele?.profile_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
+                            src={`${ele?.profile_path !== null && ele?.profile_path !== undefined ? TMDB_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
                             initial={{ opacity: 0 }}
                             animate={{
                               opacity: imageLoading ? 0 : 1,
@@ -466,7 +467,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                         {/* react-lazy-load-image-component */}
                         <LazyLoadImage
                           key={ele?.id}
-                          src={`${imagePlaceholder ? "/images/logo.svg" : ele?.profile_path !== null && ele?.profile_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
+                          src={`${imagePlaceholder ? "/images/logo.svg" : ele?.profile_path !== null && ele?.profile_path !== undefined ? TMDB_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
                           height="100%"
                           width="100%"
                           useIntersectionObserver={true}
@@ -513,7 +514,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                         {/* <AnimatePresence mode="sync">
                           <motion.img
                             key={ele?.id}
-                            src={`${ele?.profile_path !== null && ele?.profile_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
+                            src={`${ele?.profile_path !== null && ele?.profile_path !== undefined ? TMDB_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
                             initial={{ opacity: 0 }}
                             animate={{
                               opacity: imageLoading ? 0 : 1,
@@ -533,7 +534,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                         {/* react-lazy-load-image-component */}
                         <LazyLoadImage
                           key={ele?.id}
-                          src={`${imagePlaceholder ? "/images/logo.svg" : ele?.profile_path !== null && ele?.profile_path !== undefined ? process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
+                          src={`${imagePlaceholder ? "/images/logo.svg" : ele?.profile_path !== null && ele?.profile_path !== undefined ? TMDB_IMAGE_URL + ele?.profile_path : "/images/logo.svg"}`}
                           height="100%"
                           width="100%"
                           useIntersectionObserver={true}

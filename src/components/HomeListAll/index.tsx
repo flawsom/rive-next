@@ -8,10 +8,11 @@ import ContinueWatchingRow from "../ContinueWatchingRow";
 import Top10Row from "../Top10Row";
 import { getContinueWatching } from "@/Utils/continueWatching";
 import { filterForKids, PROFILE_CHANGED_EVENT } from "@/Utils/profiles";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 import { useInView } from "react-intersection-observer";
 
 const externalImageLoader = ({ src }: { src: string }) =>
-  `${process.env.NEXT_PUBLIC_TMBD_IMAGE_URL}${src}`;
+  `${TMDB_IMAGE_URL}${src}`;
 
 function shuffle(array: any) {
   let currentIndex = array.length,

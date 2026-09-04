@@ -72,6 +72,13 @@ export default async function handler(
           return res
             .status(400)
             .json({ error: "category parameter is required" });
+        // Edge-cache selection per category: health state changes slowly,
+        // and a cached verdict makes watch pages open instantly. Latency
+        // probes still run server-side underneath on cache misses.
+        res.setHeader(
+          "Cache-Control",
+          "s-maxage=120, stale-while-revalidate=600",
+        );
         return res
           .status(200)
           .json(await selectBestSource(category as any, queryProviderId));

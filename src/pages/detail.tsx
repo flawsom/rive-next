@@ -24,6 +24,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/Utils/firebase";
 import { toast } from "sonner";
 import AIInsights from "@/components/AIInsights";
+import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
 
 const DetailPage = () => {
   const params = useSearchParams();
@@ -78,8 +79,7 @@ const DetailPage = () => {
         // setImages(response.results);
         let arr: any = [];
         response.backdrops.map((ele: any, i: number) => {
-          if (i < 20)
-            arr.push(process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele.file_path);
+          if (i < 20) arr.push(TMDB_IMAGE_URL + ele.file_path);
         });
         // if (arr.length === 0) {
         //   response.posters.map((ele: any, i) => {
