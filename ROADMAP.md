@@ -52,7 +52,7 @@ Legend: ✅ shipped · 🟡 partial · ❌ missing
 
 ## 3. The 90-day route map
 
-### Phase 1 — Discovery polish (this release) ✅ shipped below
+### Phase 1 — Discovery polish ✅ **SHIPPED** (Sept 4, 2026 — live on production, 161/161 E2E)
 
 1. **Top 10 Today row** (home) — TMDB trending sorted by popularity, numbered
    posters, country-filtered feel. Netflix's most-photographed UI element.
