@@ -33,7 +33,7 @@ const DetailPage = () => {
   const [season, setSeason] = useState<string | null>();
   const [episode, setEpisode] = useState<string | null>();
   const [index, setIndex] = useState(0);
-  const [images, setImages] = useState([]);
+  const [images, setImages] = useState<string[]>([]);
   const [data, setData] = useState<any>({});
   const [bookmarked, setBookmarked] = useState(false);
   const [trailer, setTrailer] = useState<any>("");
@@ -78,6 +78,8 @@ const DetailPage = () => {
     const typeOk = rawType === "movie" || rawType === "tv";
     const idOk = !!rawId && /^\d+$/.test(rawId);
     if (!typeOk || !idOk) {
+      // Bad link (e.g. type=undefined): show the not-found state immediately
+      // instead of endless skeletons. Valid-looking ids always get a real fetch.
       // Bad link: show the not-found state immediately instead of endless skeletons.
       setData({});
       setImages([]);
@@ -86,62 +88,83 @@ const DetailPage = () => {
       return;
     }
     const fetchData = async () => {
+      // Only the primary metadata fetch decides whether a title exists.
+      // A transient failure of videos/images (TMDB rate-limit, 8s timeout,
+      // hiccup) must never declare a perfectly valid title "unavailable" —
+      // those sections degrade gracefully instead.
       try {
-        const data = await axiosFetch({ requestID: `${type}Data`, id: id });
+        // Retry once: TMDB rate-limits the shared key occasionally; a single
+        // retry absorbs that without the user ever seeing a false dead title.
+        let data: any = await axiosFetch({ requestID: `${type}Data`, id: id });
+        if (!data) {
+          await new Promise((r) => setTimeout(r, 800));
+          data = await axiosFetch({ requestID: `${type}Data`, id: id });
+        }
+        if (!data || data.success === false) {
+          // Real 404: TMDB has no such id (or it was deleted).
+          setData({});
+          setImages([]);
+          setLoading(false);
+          setNotFound(true);
+          return;
+        }
         setData(data);
-        const Videos = await axiosFetch({ requestID: `${type}Videos`, id: id });
-        setTrailer(
-          Videos?.results?.find(
-            (ele: any) => ele.type === "Trailer" && ele.official === true,
-          ),
-        );
-        const response = await axiosFetch({
-          requestID: `${type}Images`,
-          id: id,
-        });
-        // setImages(response.results);
-        let arr: any = [];
-        response.backdrops.map((ele: any, i: number) => {
-          if (i < 20) arr.push(TMDB_IMAGE_URL + ele.file_path);
-        });
-        // if (arr.length === 0) {
-        //   response.posters.map((ele: any, i) => {
-        //     if (i < 10) arr.push(process.env.NEXT_PUBLIC_TMBD_IMAGE_URL + ele.file_path);
-        //   });
-        // }
-        if (arr.length === 0) arr.push("/images/logo.svg");
-        setImages(arr);
         setLoading(false);
       } catch (error) {
-        // Failed lookup (bad id, deleted title, network) → not-found, never an eternal skeleton.
+        // Failed lookup (bad id, deleted title) → not-found, never an eternal skeleton.
         setData({});
         setImages([]);
         setLoading(false);
         setNotFound(true);
+        return;
       }
-      // finally {
-      //   const data = await axiosFetch({ requestID: `${type}Data`, id: id });
-      //   setData(data);
-      // }
+      // ── Enrichment: independent, failure-tolerant ──
+      try {
+        const Videos = await axiosFetch({ requestID: `${type}Videos`, id: id });
+        setTrailer(
+          Videos?.results?.find(
+            (ele: any) => ele.type === "Trailer" && ele.official === true,
+          ) || null,
+        );
+      } catch {
+        setTrailer(null); // no trailer is fine
+      }
+      try {
+        const response = await axiosFetch({
+          requestID: `${type}Images`,
+          id: id,
+        });
+        const arr: string[] = [];
+        (response?.backdrops || []).slice(0, 20).forEach((ele: any) => {
+          if (ele?.file_path) arr.push(TMDB_IMAGE_URL + ele.file_path);
+        });
+        if (arr.length === 0) {
+          // Some titles (esp. non-English) only have poster art.
+          (response?.posters || []).slice(0, 10).forEach((ele: any) => {
+            if (ele?.file_path) arr.push(TMDB_IMAGE_URL + ele.file_path);
+          });
+        }
+        if (arr.length === 0) arr.push("/images/logo.svg");
+        setImages(arr);
+      } catch {
+        setImages(["/images/logo.svg"]); // gallery failure is non-fatal
+      }
     };
     fetchData();
   }, [params, id]);
 
   useEffect(() => {
     if (!auth) {
-      setLoading(false);
+      setUser(null);
       return;
     }
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userID = user.uid;
-        setUser(userID);
-        // setIds(await getBookmarks(userID)?.movie)
-        setLoading(false);
-      } else {
-        setLoading(true);
-      }
+    // Auth must never block rendering: this effect only resolves the user
+    // for bookmark checks. Forcing loading=true here used to race the data
+    // fetch and re-hide an already-loaded page.
+    const unsub = onAuthStateChanged(auth, (user) => {
+      setUser(user ? user.uid : null);
     });
+    return () => unsub && unsub();
   }, []);
 
   useEffect(() => {
