@@ -1,4 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+
+// Vercel Hobby caps serverless functions at 60s — declare it so the platform
+// does not kill the request mid-stream.
+export const maxDuration = 60;
 import { generateRecommendations } from "@/Utils/ai";
 import {
   rejectUnsupportedMethod,
@@ -42,7 +46,7 @@ export default async function handler(
   try {
     const result = await withTimeout(
       generateRecommendations({ recentlyWatched, favoriteGenres, preferences }),
-      90_000, // free-tier gateway models can be slow; TMDB verification adds latency
+      55_000, // fits the Vercel Hobby function cap (60s) with headroom
     );
     return res.status(200).json(result);
   } catch {

@@ -65,7 +65,7 @@ async function get(path, { timeout = 20000 } = {}) {
   }
 }
 
-async function post(path, body, { timeout = 30000 } = {}) {
+async function post(path, body, { timeout = 60000 } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeout);
   try {
@@ -376,7 +376,9 @@ const main = async () => {
     ["/api/ai/chat", { messages: [{ role: "user", content: "hi" }] }, "chat"],
   ];
   for (const [path, body, kind] of aiChecks) {
-    const r = await post(path, body, { timeout: 30000 });
+    // 60s: free-tier reasoning models need real generation time, and serverless
+    // functions cap at 60s — the client must not give up before the server does.
+    const r = await post(path, body, { timeout: 60000 });
     if (r.status === 0) {
       check(`POST ${path}`, false, `network error: ${r.error}`);
       continue;

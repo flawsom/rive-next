@@ -1,4 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+
+// Vercel Hobby caps serverless functions at 60s — declare it so the platform
+// does not kill the request mid-stream.
+export const maxDuration = 60;
 import { generateChatResponse } from "@/Utils/ai";
 import {
   asBoundedString,
@@ -54,7 +58,7 @@ export default async function handler(
         }[],
         safeContext,
       ),
-      90_000, // free-tier gateway models can be slow; fallback chain multiplies latency
+      55_000, // fits the Vercel Hobby function cap (60s) with headroom
     );
     return res.status(200).json({ response });
   } catch (error: any) {

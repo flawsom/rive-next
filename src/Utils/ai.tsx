@@ -45,6 +45,58 @@ const MODEL_CHAIN = [
 /** Last model that answered successfully — tried first on subsequent calls. */
 let preferredModel: string | null = null;
 
+/**
+ * Extract the outermost JSON object from model output.
+ *
+ * Reasoning models (mimo, hy3, …) often emit chain-of-thought prose *before*
+ * the JSON payload, which breaks naive JSON.parse. This scans for the first
+ * balanced {…} block (string- and escape-aware) and parses that. Code fences
+ * are tolerated. Returns null when no parseable object exists.
+ */
+function extractJsonObject(content: string): any | null {
+  const text = content.replace(/```(?:json)?/gi, "");
+  const objStart = text.indexOf("{");
+  const arrStart = text.indexOf("[");
+  let start = -1;
+  let open = "";
+  let close = "";
+  if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) {
+    start = objStart;
+    open = "{";
+    close = "}";
+  } else if (arrStart !== -1) {
+    start = arrStart;
+    open = "[";
+    close = "]";
+  }
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(text.slice(start, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 let openaiClient: OpenAI | null = null;
 
 export function getOpenAIClient(): OpenAI {
@@ -77,15 +129,35 @@ async function chatComplete(options: {
     ? [preferredModel, ...MODEL_CHAIN.filter((m) => m !== preferredModel)]
     : MODEL_CHAIN;
 
+  // Latency budgets: free-tier gateway models occasionally hang, and the SDK's
+  // default timeout (10 min) would blow straight through serverless function
+  // limits. Reasoning models also need real generation time (thinking tokens
+  // precede the payload), so each attempt gets the remaining phase budget —
+  // capped — and the whole LLM phase keeps headroom for the TMDB grounding
+  // that runs after it inside the same request.
+  const ATTEMPT_TIMEOUT_CAP_MS = 40_000;
+  const PHASE_BUDGET_MS = 45_000;
+  const phaseStarted = Date.now();
+
   let lastError: unknown = null;
   for (const model of chain) {
+    const remaining = PHASE_BUDGET_MS - (Date.now() - phaseStarted);
+    if (remaining <= 2_000) break;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.min(ATTEMPT_TIMEOUT_CAP_MS, remaining),
+    );
     try {
-      const response = await openai.chat.completions.create({
-        model,
-        messages: options.messages,
-        max_tokens: options.maxTokens,
-        temperature: options.temperature,
-      });
+      const response = await openai.chat.completions.create(
+        {
+          model,
+          messages: options.messages,
+          max_tokens: options.maxTokens,
+          temperature: options.temperature,
+        },
+        { signal: controller.signal },
+      );
       const content = response.choices[0]?.message?.content;
       if (content) {
         preferredModel = model;
@@ -94,6 +166,8 @@ async function chatComplete(options: {
       lastError = new Error("Empty completion");
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastError ?? new Error("All gateway models failed");
@@ -291,7 +365,7 @@ export async function generateChatResponse(
 
   return await chatComplete({
     messages: [systemMessage, ...messages],
-    maxTokens: 2400, // reasoning models emit hidden thinking tokens first
+    maxTokens: 3000, // reasoning models emit thinking tokens before the JSON payload
     temperature: 0.7,
   });
 }
@@ -338,14 +412,11 @@ Respond with ONLY a JSON array: [{"i":0,"reason":"..."},{"i":1,"reason":"..."}] 
         },
         { role: "user", content: prompt },
       ],
-      maxTokens: 1600, // reasoning models emit hidden thinking tokens first
+      maxTokens: 3000, // reasoning models emit thinking tokens before the JSON payload
       temperature: 0.7,
     });
-    const jsonStr = content
-      .replace(/```json?\n?/g, "")
-      .replace(/```/g, "")
-      .trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = extractJsonObject(content);
+    if (!parsed) return false;
     let upgraded = false;
     for (const entry of Array.isArray(parsed) ? parsed : []) {
       const idx = Number(entry?.i);
@@ -405,15 +476,11 @@ Return ONLY valid JSON, no markdown formatting.`;
         },
         { role: "user", content: prompt },
       ],
-      maxTokens: 1600, // reasoning models emit hidden thinking tokens first
+      maxTokens: 3000, // reasoning models emit thinking tokens before the JSON payload
       temperature: 0.7,
     });
 
-    const jsonStr = content
-      .replace(/```json?\n?/g, "")
-      .replace(/```/g, "")
-      .trim();
-    return JSON.parse(jsonStr);
+    return extractJsonObject(content);
   } catch {
     return {
       summary: data.overview?.substring(0, 200) + "...",
@@ -469,15 +536,12 @@ Prefer titles that actually exist (real films/series, any era). Return ONLY vali
         },
         { role: "user", content: prompt },
       ],
-      maxTokens: 2400, // reasoning models emit hidden thinking tokens first
+      maxTokens: 3000, // reasoning models emit thinking tokens before the JSON payload
       temperature: 0.8,
     });
 
-    const jsonStr = content
-      .replace(/```json?\n?/g, "")
-      .replace(/```/g, "")
-      .trim();
-    const parsed = JSON.parse(jsonStr);
+    const parsed = extractJsonObject(content);
+    if (!parsed) throw new Error("Model returned no parseable JSON");
 
     // Ground each suggestion against TMDB — keep only verifiable titles,
     // enriched with real ids/posters/years (max 6 kept from 8 candidates).

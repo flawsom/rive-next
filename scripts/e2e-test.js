@@ -4,7 +4,10 @@
  * Run: node scripts/e2e-test.js
  */
 
-const BASE_URL = "http://localhost:3000";
+const BASE_URL =
+  process.env.OPENSTREAM_E2E_BASE ||
+  process.env.RIVE_E2E_BASE ||
+  "http://localhost:3000";
 
 // State-changing endpoints require POST with a JSON body.
 async function postJson(path, body) {

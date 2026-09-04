@@ -102,7 +102,7 @@ export default async function axiosFetch({
       const page = Math.max(1, Math.floor(Math.random() * totalPages));
       const list = await axios.get(
         `${baseURL}/${endpoint}?language=${language}&page=${page}&sort_by=popularity.desc`,
-        { params: { api_key: API_KEY } },
+        { params: { api_key: API_KEY }, timeout: 8_000 },
       );
       const results = list.data?.results || [];
       const pick =
@@ -130,6 +130,7 @@ export default async function axiosFetch({
   try {
     const response = await axios.get(final_request, {
       params: { api_key: API_KEY },
+      timeout: 8_000, // serverless deadline safety: never let TMDB hang a request
     });
     return await response.data; // Return the resolved data from the response
   } catch (error) {
