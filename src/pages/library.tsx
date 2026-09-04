@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import axiosFetch from "@/Utils/fetchBackend";
 import styles from "@/styles/Library.module.scss";
 import MovieCardSmall from "@/components/MovieCardSmall";
@@ -32,6 +33,7 @@ function capitalizeFirstLetter(string: string) {
 
 const dummyList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const Library = () => {
+  const router = useRouter();
   const [category, setCategory] = useState("watchlist"); // latest, trending, topRated
   const [subCategory, setSubCategory] = useState("movie");
   const [ids, setIds] = useState<any[]>([]);
@@ -189,6 +191,13 @@ const Library = () => {
           onClick={() => setCategory("history")}
         >
           History
+        </p>
+        <p
+          className={styles.inactive}
+          style={{ cursor: "pointer" }}
+          onClick={() => router.push("/collections/community")}
+        >
+          Community Lists →
         </p>
         {category === "history" && historyEntries?.length > 0 && (
           <p

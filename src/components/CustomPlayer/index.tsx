@@ -20,6 +20,7 @@ import {
   BsChatSquareText,
   BsSpeedometer2,
   BsHddStack,
+  BsCast,
 } from "react-icons/bs";
 
 // All media flows through the SSRF-guarded proxy so CORS never blocks playback.
@@ -477,6 +478,66 @@ const CustomPlayer = ({
     setPlaybackState(playing ? "playing" : "paused");
   }, [playing]);
 
+  // ─── Cast / remote playback (Chromecast + AirPlay + DIAL) ────────────────
+  // The Remote Playback API covers Chromecast/DIAL devices; Safari exposes
+  // AirPlay through a `webkit-cast` availability hint. We surface one button
+  // that opens the browser's native device picker when available.
+  const [canCast, setCanCast] = useState(false);
+  const [isCasting, setIsCasting] = useState(false);
+  const remoteRef = useRef<any>(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const check = () => {
+      const remote = (video as any).remote;
+      const airplayHint =
+        typeof window !== "undefined" &&
+        (window as any).WebKitPlaybackTargetAvailabilityEvent !== undefined;
+      setCanCast(!!remote || airplayHint);
+    };
+    check();
+    if (
+      typeof window !== "undefined" &&
+      (window as any).WebKitPlaybackTargetAvailabilityEvent
+    ) {
+      const onAvailability = (e: any) =>
+        setCanCast(e.availability === "available");
+      window.addEventListener(
+        "WebKitPlaybackTargetAvailabilityEvent",
+        onAvailability,
+      );
+      return () =>
+        window.removeEventListener(
+          "WebKitPlaybackTargetAvailabilityEvent",
+          onAvailability,
+        );
+    }
+    return undefined;
+  }, []);
+
+  const toggleCast = useCallback(async () => {
+    const video = videoRef.current as any;
+    if (!video) return;
+    try {
+      if (video.remote && video.remote.state !== "connected") {
+        // Remote Playback API (Chromecast/DIAL).
+        const watches = video.remote.getAvailability?.();
+        await video.remote.prompt();
+        remoteRef.current = video.remote;
+        setIsCasting(video.remote.state === "connected");
+      } else if ((window as any).WebKitPlaybackTargetAvailabilityEvent) {
+        // Safari AirPlay.
+        (video as any).webkitShowPlaybackTargetPicker?.();
+        setIsCasting(true);
+      }
+    } catch {
+      // User cancelled the device picker or no device available.
+      setIsCasting(false);
+    }
+  }, []);
+  const toggleCastRef = useRef(toggleCast);
+  toggleCastRef.current = toggleCast;
+
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current;
     if (!video) return;
@@ -758,6 +819,17 @@ const CustomPlayer = ({
 
             <div style={{ flex: 1 }} />
 
+            {canCast && (
+              <button
+                className={`${styles.iconBtn} ${isCasting ? styles.castActive : ""}`}
+                onClick={() => toggleCastRef.current()}
+                aria-label="Cast to device"
+                data-tooltip-id="tooltip"
+                data-tooltip-content="Cast to TV (Chromecast / AirPlay)"
+              >
+                <BsCast />
+              </button>
+            )}
             {document.pictureInPictureEnabled !== false && (
               <button
                 className={styles.iconBtn}

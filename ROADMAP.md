@@ -76,7 +76,7 @@ Legend: ✅ shipped · 🟡 partial · ❌ missing
    Sources page; the selector honors the pin while it stays reachable and
    falls back to latency ranking automatically when it doesn't.
 
-### Phase 3 — Playback mastery (the moat) — PARTIALLY SHIPPED
+### Phase 3 — Playback mastery (the moat) ✅ SHIPPED
 
 9. **Direct stream extraction pipeline** ✅ v1 — `/api/providers/extract`
    fetches embed pages server-side and extracts HLS/mp4/webm candidates
@@ -86,17 +86,21 @@ Legend: ✅ shipped · 🟡 partial · ❌ missing
     (host publishes play/pause/position; guests follow with drift-corrected
     seeks). Direct-playback surfaces only; needs Firestore rules documented
     in ABOUT_ENV.md.
-11. **Chromecast/AirPlay** via Remote Playback API — not yet built.
+11. **Chromecast/AirPlay** ✅ — cast button in the custom player: Remote
+    Playback API (Chromecast/DIAL) + Safari AirPlay target picker, with an
+    active-cast highlight state.
 12. **Trailer autoplay in hero** ✅ — muted YouTube-nocookie preview behind
     the hero (desktop, reduced-motion aware, sound toggle, tab-hidden pause).
 
-### Phase 4 — Intelligence — PARTIALLY SHIPPED
+### Phase 4 — Intelligence ✅ SHIPPED
 
 13. **Taste profile export** ✅ — one-click JSON export/import of watchlist,
     history, continue-watching and searches (Settings → Your Data).
 14. **AI weekly digest** ✅ — `/api/ai/digest` generates a personalized
     weekly recap + one weekend pick from the existing TMDB-grounded pipeline.
-15. **Community lists** — user-curated public collections. Not yet built.
+15. **Community lists** ✅ — user-curated public collections on Firestore:
+    browse, like, share deep links, and publish your watchlist as a list in
+    one tap (`/collections/community`, linked from Library).
 
 ## 4. What we deliberately do NOT build
 
