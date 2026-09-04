@@ -77,6 +77,27 @@ This powers the AI features including:
 > Freshness comes from live TMDB data injected into prompts — no gateway
 > needs native web browsing.
 
+## **Firestore security rules**
+
+The optional cloud features use four Firestore collections. Deploy the
+bundled rules after configuring Firebase:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+(or paste `firestore.rules` into Firebase Console → Firestore Database → Rules)
+
+| Collection       | Read                         | Write                                                           |
+| ---------------- | ---------------------------- | --------------------------------------------------------------- |
+| `watchlist`      | owner only                   | owner only                                                      |
+| `history`        | owner only                   | owner only                                                      |
+| `watchParty`     | public (guests join by code) | participants (ephemeral rooms)                                  |
+| `communityLists` | public browse                | create/update gated to the author; likes limited to like-fields |
+
+Watch parties and community lists degrade gracefully when Firebase keys are
+absent — the UI simply hides those features for self-hosters who skip them.
+
 ## **Disclaimer**
 
 > [!IMPORTANT]

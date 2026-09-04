@@ -128,6 +128,7 @@ const main = async () => {
     "/watch?type=movie&id=872585",
     "/library",
     "/sources",
+    "/collections/community",
     "/settings",
     "/login",
     "/signup",
@@ -311,6 +312,33 @@ const main = async () => {
   );
   check("manifest sync (POST)", sync.status === 200, `→ ${sync.status}`);
 
+  // Direct-stream extraction (best-effort: network-dependent, shape always checked)
+  const extract = await get(
+    "/api/providers/extract?providerId=hdhub4u&type=movie&id=27205",
+    { timeout: 60000 },
+  );
+  const extractShape =
+    extract.status === 200 &&
+    extract.json &&
+    typeof extract.json.count === "number" &&
+    Array.isArray(extract.json.streams) &&
+    extract.json.streams.every(
+      (s) => typeof s.url === "string" && typeof s.kind === "string",
+    );
+  check(
+    "extraction endpoint shape",
+    extractShape,
+    `→ ${extract.status}, candidates:${extract.json?.count ?? "?"}`,
+  );
+  const extractBad = await get(
+    "/api/providers/extract?providerId=not-a-provider&type=movie&id=1",
+  );
+  check(
+    "extraction rejects unknown provider",
+    extractBad.status === 400,
+    `→ ${extractBad.status}`,
+  );
+
   // ─── 5. Media proxy guards ────────────────────────────────────────────
   console.log("\n🛡️ TEST: Media proxy guards (/api/proxy/media)");
   const privateUrl = await get(
@@ -374,6 +402,18 @@ const main = async () => {
       "insights",
     ],
     ["/api/ai/chat", { messages: [{ role: "user", content: "hi" }] }, "chat"],
+    [
+      "/api/ai/digest",
+      {
+        watchedTitles: [
+          { title: "Interstellar", type: "movie", genres: ["Sci-Fi"] },
+          { title: "Breaking Bad", type: "tv", genres: ["Crime"] },
+        ],
+        totalMinutes: 420,
+        topGenres: ["Sci-Fi"],
+      },
+      "digest",
+    ],
   ];
   for (const [path, body, kind] of aiChecks) {
     // 60s: free-tier reasoning models need real generation time, and serverless
@@ -407,6 +447,12 @@ const main = async () => {
           r.json.response.length > 0;
       if (kind === "insights")
         okLive = okLive && typeof r.json === "object" && !("error" in r.json);
+      if (kind === "digest")
+        okLive =
+          okLive &&
+          typeof r.json.headline === "string" &&
+          r.json.headline.length > 0 &&
+          typeof r.json.recap === "string";
       if (!okLive && r.json?.error) detailTxt += ` error:${r.json.error}`;
       check(`POST ${path} (live)`, okLive, detailTxt);
     } else {

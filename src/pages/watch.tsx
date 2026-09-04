@@ -262,7 +262,12 @@ const Watch = () => {
   }
 
   // streamUrl must be declared before callbacks that reference it
+  const [streamOverride, setStreamOverride] = useState<string | null>(null);
+  useEffect(() => {
+    setStreamOverride(null); // new source/episode → drop any extracted stream
+  }, [currentProvider, id, season, episode]);
   const streamUrl = useMemo(() => {
+    if (streamOverride) return streamOverride;
     if (!currentProvider) return null;
     // Use autonomous domain resolver for the best working URL
     return resolveStreamUrl(
@@ -272,7 +277,15 @@ const Watch = () => {
       season ? parseInt(season) : undefined,
       episode ? parseInt(episode) : undefined,
     );
-  }, [currentProvider, type, id, season, episode, domainVersion]);
+  }, [
+    currentProvider,
+    type,
+    id,
+    season,
+    episode,
+    domainVersion,
+    streamOverride,
+  ]);
 
   // ─── Playback mode detection ───────────────────────────────────────────────
   // If the resolved URL is direct media (HLS/mp4/webm), the custom player
@@ -320,6 +333,75 @@ const Watch = () => {
       })
       .finally(() => clearTimeout(timer));
   }, [streamUrl]);
+
+  // ─── Direct-stream extraction boost ─────────────────────────────────────
+  // While the embed loads, quietly ask the extraction endpoint for direct
+  // HLS/mp4 candidates. A verified direct stream beats any embed (native
+  // quality/subtitle controls, cast, watch-party), so the first candidate
+  // that passes the proxy content-type check takes over playback.
+  useEffect(() => {
+    if (!currentProvider || !id || !type) return;
+    if (
+      playbackMode === "direct" &&
+      directMediaCache.current[streamUrl || ""]
+    ) {
+      return; // already on a direct stream from the primary URL
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    const params = new URLSearchParams({
+      providerId: currentProvider.id,
+      type,
+      id: String(id),
+    });
+    if (season) params.set("season", season);
+    if (episode) params.set("episode", episode);
+    const run = async () => {
+      try {
+        const res = await fetch(`/api/providers/extract?${params}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        for (const candidate of data.streams || []) {
+          if (cancelled) return;
+          if (candidate.kind !== "hls" && candidate.kind !== "mp4") continue;
+          try {
+            const head = await fetch(
+              `/api/proxy/media?url=${encodeURIComponent(candidate.url)}`,
+              { method: "HEAD", cache: "no-store" },
+            );
+            const ct = head.headers.get("content-type") || "";
+            if (
+              head.ok &&
+              /video\/|application\/vnd\.apple\.mpegurl|audio\//.test(ct)
+            ) {
+              if (cancelled) return;
+              setStreamOverride(candidate.url);
+              setIframeError(false);
+              setIframeLoading(false);
+              toast.success("Direct stream found", {
+                description: `${candidate.kind.toUpperCase()} • native quality & subtitle controls enabled`,
+                duration: 3000,
+                position: "top-center",
+              });
+              return;
+            }
+          } catch {
+            // try next candidate
+          }
+        }
+      } catch {
+        // extraction unavailable — the embed path continues undisturbed
+      }
+    };
+    const timer = setTimeout(run, 2500); // let the embed get a head start
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [currentProvider, id, type, season, episode, playbackMode, streamUrl]);
 
   // Resume position for the custom player, from continue-watching progress.
   const resumeSeconds = useMemo(() => {

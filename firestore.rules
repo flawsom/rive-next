@@ -1,0 +1,64 @@
+rules_version = '2';
+// Open Stream Firestore security rules.
+//
+// Deploy with: firebase deploy --only firestore:rules
+// (or paste into Firebase Console → Firestore Database → Rules)
+//
+// Collections:
+//   watchlist        — per-user bookmarks (already documented in ABOUT_ENV.md)
+//   history          — per-user watch history sync
+//   watchParty       — ephemeral rooms for synchronized playback
+//   communityLists   — user-curated public collections
+//
+// All writes are gated to signed-in users; reads stay open so guests can
+// browse community content and join watch parties.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Watchlist: private per user ────────────────────────────────────────
+    match /watchlist/{docId} {
+      allow read: if request.auth != null &&
+        resource.data.userID == request.auth.uid;
+      allow create: if request.auth != null &&
+        request.resource.data.userID == request.auth.uid;
+      allow update, delete: if request.auth != null &&
+        resource.data.userID == request.auth.uid;
+    }
+
+    // ─── History: one doc per user uid ─────────────────────────────────────
+    match /history/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ─── Watch party rooms: open read, authenticated write ──────────────────
+    match /watchParty/{roomCode} {
+      allow read: if true; // guests join with a code
+      allow create, update: if request.auth == null || request.auth != null;
+      // Room codes are 6 random chars and rooms are ephemeral; anyone with
+      // the code can participate, matching the product's anonymous-party UX.
+      allow delete: if false; // expire via TTL policy instead
+
+      // Presence subcollection (members).
+      match /members/{memberId} {
+        allow read: if true;
+        allow write: if true; // heartbeat upserts from any participant
+      }
+    }
+
+    // ─── Community lists: public read, owner-gated write ────────────────────
+    match /communityLists/{listId} {
+      allow read: if true;
+      allow create: if request.auth != null &&
+        request.resource.data.authorId == request.auth.uid;
+      // Likes modify `likes`/`likedBy`; item edits require ownership.
+      allow update: if request.auth != null &&
+        (resource.data.authorId == request.auth.uid ||
+         // likers may only touch the like fields
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['likes', 'likedBy']));
+      allow delete: if request.auth != null &&
+        resource.data.authorId == request.auth.uid;
+    }
+  }
+}

@@ -172,6 +172,64 @@ routes, private headers, input clamping, and secret-free env preflight.
 
 </td>
 </tr>
+<tr>
+<td width="33%" valign="top">
+
+### 👥 Profiles & Kids Mode
+
+Netflix-style profile switcher in the navbar — every profile gets its own
+watchlist, history, continue-watching and settings via scoped storage
+(zero-migration). Kids profiles filter mature genres from discovery.
+
+</td>
+<td width="33%" valign="top">
+
+### 📺 Direct Streams + Cast
+
+Server-side extraction pulls **HLS/mp4/webm** out of embed pages; the custom
+player adds quality menus, subtitle upload, speed, PiP, **lockscreen media
+controls** and one-tap **Chromecast / AirPlay**.
+
+</td>
+<td width="33%" valign="top">
+
+### 🎉 Watch Parties
+
+Synchronized playback rooms over Firestore snapshots — a 6-char code, invite
+link, drift-corrected guest sync, and presence heartbeats. Friends follow
+the host within normal Firestore latency.
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+### 📌 Source Pinning
+
+Prefer a provider per category from the Sources page. Pins override the
+defaults while the source stays reachable and fall back to latency ranking
+automatically when it doesn't.
+
+</td>
+<td width="33%" valign="top">
+
+### 🗓 Community Lists
+
+Publish your watchlist as a shareable public collection in one tap. Browse,
+like and deep-link curated lists at `/collections/community` — guests
+browse free.
+
+</td>
+<td width="33%" valign="top">
+
+### 📊 Weekly Digest + Data Export
+
+A personal AI recap of your week with one weekend pick, generated from your
+real history — plus one-click JSON **export/import** of your entire taste
+profile. Your data is yours.
+
+</td>
+</tr>
 </table>
 
 <div align="right"><a href="#open-stream">⬆ Back to top</a></div>
@@ -640,6 +698,7 @@ POST /api/ai/recommend
 POST /api/ai/insights
 POST /api/ai/search
 POST /api/ai/polish
+POST /api/ai/digest      # weekly recap + one weekend pick
 ```
 
 ```json
@@ -680,6 +739,30 @@ HEAD /api/proxy/media?url=<encoded-upstream-url>     # content-type sniffing
 
 Range passthrough enables seeking; SSRF guards block localhost/private
 addresses; upstream calls time out at 30s.
+
+### Direct-stream extraction
+
+```http
+GET /api/providers/extract?providerId=hdhub4u&type=movie&id=27205&season=&episode=
+```
+
+```json
+{
+  "provider": "hdhub4u",
+  "embedUrl": "https://…/movie/27205",
+  "count": 3,
+  "streams": [
+    { "url": "https://….m3u8", "kind": "hls", "source": "html" },
+    { "url": "https://….mp4", "kind": "mp4", "source": "api" }
+  ],
+  "extractedAt": 1788534970217
+}
+```
+
+Candidates are ranked HLS-first and should be verified through the media
+proxy before handing to the player. The watch page does this automatically
+and promotes a verified direct stream over the embed (native quality,
+subtitle and cast controls).
 
 ### Test preflight
 

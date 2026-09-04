@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import styles from "@/styles/AI.module.scss";
-import { BsStars } from "react-icons/bs";
+import { BsStars, BsCalendarWeek } from "react-icons/bs";
 import { IoSend } from "react-icons/io5";
 import {
   FaRobot,
@@ -14,6 +14,43 @@ import {
 } from "react-icons/fa";
 import { getContinueWatching } from "@/Utils/continueWatching";
 import { getBookmarks } from "@/Utils/bookmark";
+import { getHistoryEntries } from "@/Utils/watchHistory";
+
+interface WeeklyDigest {
+  headline: string;
+  recap: string;
+  pick: { title: string; reason: string } | null;
+}
+
+const GENRE_NAMES: Record<number, string> = {
+  28: "Action",
+  12: "Adventure",
+  16: "Animation",
+  35: "Comedy",
+  80: "Crime",
+  99: "Documentary",
+  18: "Drama",
+  10751: "Family",
+  14: "Fantasy",
+  36: "History",
+  27: "Horror",
+  10402: "Music",
+  9648: "Mystery",
+  10749: "Romance",
+  878: "Sci-Fi",
+  10770: "TV Movie",
+  53: "Thriller",
+  10752: "War",
+  37: "Western",
+  10759: "Action & Adventure",
+  10762: "Kids",
+  10763: "News",
+  10764: "Reality",
+  10765: "Sci-Fi & Fantasy",
+  10766: "Soap",
+  10767: "Talk",
+  10768: "War & Politics",
+};
 
 interface Message {
   id: string;
@@ -59,8 +96,40 @@ const AIPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [digest, setDigest] = useState<WeeklyDigest | null>(null);
+  const [digestLoading, setDigestLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Weekly digest — generated once per visit from this profile's real history.
+  useEffect(() => {
+    const entries = getHistoryEntries().slice(0, 10);
+    if (entries.length === 0) return;
+    setDigestLoading(true);
+    const totalMinutes = entries.reduce(
+      (sum, e) => sum + (e.minutesWatched || 0),
+      0,
+    );
+    fetch("/api/ai/digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        watchedTitles: entries.map((e) => ({
+          title: e.title || "",
+          type: e.type,
+          genres: [],
+        })),
+        totalMinutes,
+        topGenres: [],
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.headline) setDigest(data);
+      })
+      .catch(() => {})
+      .finally(() => setDigestLoading(false));
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -213,6 +282,54 @@ const AIPage = () => {
                 mood, find hidden gems, or help you discover your next favorite
                 watch.
               </p>
+              {digestLoading && (
+                <p style={{ opacity: 0.5, fontSize: "0.8rem" }}>
+                  Writing your weekly digest…
+                </p>
+              )}
+              {digest && (
+                <div
+                  style={{
+                    margin: "1rem auto 0",
+                    maxWidth: 520,
+                    textAlign: "left",
+                    background: "rgba(79,140,255,0.08)",
+                    border: "1px solid rgba(79,140,255,0.3)",
+                    borderRadius: 12,
+                    padding: "0.9rem 1.1rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      color: "#4f8cff",
+                      fontWeight: 700,
+                      fontSize: "0.85rem",
+                      marginBottom: "0.35rem",
+                    }}
+                  >
+                    <BsCalendarWeek /> {digest.headline}
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.85rem",
+                      opacity: 0.85,
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {digest.recap}
+                  </p>
+                  {digest.pick && (
+                    <p style={{ margin: "0.5rem 0 0", fontSize: "0.82rem" }}>
+                      <b>This weekend:</b> {digest.pick.title} —{" "}
+                      {digest.pick.reason}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className={styles.quickActions}>
                 {QUICK_ACTIONS.map((action, i) => (
                   <button
