@@ -24,10 +24,14 @@ import {
 } from "react-icons/bs";
 
 // All media flows through the SSRF-guarded proxy so CORS never blocks playback.
+// Only the QUERY form is used: the path form (`/api/proxy/media/<encoded>`)
+// 404s on Vercel because encoded slashes are decoded before route matching.
+// The proxy rewrites every HLS child URI to an absolute upstream URL, so
+// relative resolution inside playlists is never a problem.
 const proxiedQuery = (url: string) =>
   `/api/proxy/media?url=${encodeURIComponent(url)}`;
 const proxiedPath = (url: string) =>
-  `/api/proxy/media/${encodeURIComponent(url)}`;
+  `/api/proxy/media?url=${encodeURIComponent(url)}`;
 
 interface SubtitleTrack {
   label: string;
