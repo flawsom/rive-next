@@ -144,7 +144,15 @@ export default async function axiosFetch({
       timeout: 8_000, // serverless deadline safety: never let TMDB hang a request
     });
     return await response.data; // Return the resolved data from the response
-  } catch (error) {
+  } catch (error: any) {
+    // A TMDB 404 is DEFINITIVE — the id simply doesn't exist for this type
+    // (e.g. a movie id queried as tv). Pass its { success: false } body
+    // through so the client can distinguish "wrong type, try the other one"
+    // from a transient failure (timeout/rate-limit/network), which must stay
+    // retryable and therefore returns undefined here.
+    if (error?.response?.status === 404 && error?.response?.data) {
+      return error.response.data;
+    }
     console.error("Error fetching data:", error);
     // Handle errors appropriately (e.g., throw a custom error or return null)
     // throw new Error("Failed to fetch data"); // Example error handling

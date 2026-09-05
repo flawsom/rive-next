@@ -46,7 +46,7 @@ import {
 
 const Watch = () => {
   const params = useSearchParams();
-  const { back, push } = useRouter();
+  const { back, push, replace } = useRouter();
   const [type, setType] = useState<string | null>("");
   const [id, setId] = useState<any>();
   const [season, setSeason] = useState<any>();
@@ -187,47 +187,104 @@ const Watch = () => {
   }, [getSourceCategory, selectedProviderId]);
 
   useEffect(() => {
+    const rawType = params.get("type");
+    const rawId = params.get("id");
+    const rawSeason = params.get("season");
+    const rawEpisode = params.get("episode");
     setLoading(true);
-    setType(params.get("type"));
-    setId(params.get("id"));
-    setSeason(params.get("season"));
-    setEpisode(params.get("episode"));
+    setType(rawType);
+    setId(rawId);
+    setSeason(rawSeason);
+    setEpisode(rawEpisode);
     setIframeError(false);
     setIframeLoading(true);
 
+    if (!rawId || !/^\d+$/.test(rawId)) {
+      setLoading(false);
+      return;
+    }
+
     const fetch = async () => {
-      const res: any = await axiosFetch({ requestID: `${type}Data`, id: id });
-      setdata(res);
-      setMaxSeason(res?.number_of_seasons);
-      const seasonData = await axiosFetch({
-        requestID: "tvEpisodes",
-        id: id,
-        season: season,
-      });
-      seasonData?.episodes?.length > 0 &&
-        setMaxEpisodes(
-          seasonData?.episodes[seasonData?.episodes?.length - 1]
-            ?.episode_number,
-        );
-      setMinEpisodes(seasonData?.episodes[0]?.episode_number);
-      if (parseInt(episode) >= maxEpisodes - 1) {
-        var nextseasonData = await axiosFetch({
+      // Read params directly (not the state set above — those land on the
+      // next render, which used to make the first pass fetch requestID
+      // "Data" with a garbage URL and silently kill metadata).
+      const effSeason = rawSeason || "1";
+      const effEpisode = rawEpisode || "1";
+
+      const loadWith = (t: string) =>
+        axiosFetch({ requestID: `${t}Data`, id: rawId, language: "en-US" });
+
+      // ── Type safety net ──
+      // A wrong type in the URL (movie id opened as tv, or vice versa — or no
+      // type at all) used to build embeds for a source that can never have
+      // the title: the player then showed "No content available" forever.
+      // TMDB answers { success: false } for a type/id mismatch, so verify and
+      // REPAIR the URL instead of playing a guaranteed miss.
+      let meta: any =
+        rawType === "movie" || rawType === "tv"
+          ? await loadWith(rawType)
+          : null;
+      let effectiveType = rawType;
+
+      if (!meta || meta.success === false) {
+        // Try the remaining type(s): the cross-type swap for a wrong type, or
+        // both in order when the type is missing/garbled.
+        const candidates =
+          rawType === "movie" || rawType === "tv"
+            ? [rawType === "tv" ? "movie" : "tv"]
+            : ["tv", "movie"];
+        for (const candidate of candidates) {
+          const alt: any = await loadWith(candidate);
+          if (alt && alt.success !== false) {
+            const qs = new URLSearchParams();
+            qs.set("type", candidate);
+            qs.set("id", rawId as string);
+            if (candidate === "tv") {
+              qs.set("season", effSeason);
+              qs.set("episode", effEpisode);
+            }
+            replace(`/watch?${qs.toString()}`);
+            return; // effect re-runs with the corrected URL
+          }
+        }
+        if (!meta) {
+          // Transient failure on both — don't block the player; the embed
+          // builds from URL params and the watchdog handles dead sources.
+          setLoading(false);
+          return;
+        }
+        effectiveType = rawType; // genuine unknown id: player fallbacks apply
+      }
+      setdata(meta);
+
+      if (effectiveType === "tv") {
+        setMaxSeason(meta?.number_of_seasons || 1);
+        const seasonData = await axiosFetch({
           requestID: "tvEpisodes",
-          id: id,
-          season: parseInt(season) + 1,
+          id: rawId,
+          season: Number(effSeason),
         });
-        nextseasonData?.episodes?.length > 0 &&
-          setNextSeasonMinEpisodes(nextseasonData?.episodes[0]?.episode_number);
+        if (seasonData?.episodes?.length > 0) {
+          setMaxEpisodes(
+            seasonData?.episodes[seasonData?.episodes?.length - 1]
+              ?.episode_number,
+          );
+          setMinEpisodes(seasonData?.episodes[0]?.episode_number);
+        }
+        if (parseInt(effEpisode) >= maxEpisodes - 1) {
+          const nextseasonData = await axiosFetch({
+            requestID: "tvEpisodes",
+            id: rawId,
+            season: parseInt(effSeason) + 1,
+          });
+          nextseasonData?.episodes?.length > 0 &&
+            setNextSeasonMinEpisodes(
+              nextseasonData?.episodes[0]?.episode_number,
+            );
+        }
       }
     };
-    if (type === "movie") {
-      // Movies need metadata too (title/share/download naming/resume) — the
-      // previous guard left `data` empty for every movie on this page.
-      axiosFetch({ requestID: "movieData", id: id })
-        .then((res: any) => setdata(res))
-        .catch(() => {});
-    }
-    if (type === "tv") fetch();
+    fetch();
 
     const handleKeyDown = (event: any) => {
       if (event.shiftKey && event.key === "N") {
@@ -252,7 +309,8 @@ const Watch = () => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [params, id, season, episode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   function handleBackward() {
     if (episode > minEpisodes)
