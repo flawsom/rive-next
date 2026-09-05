@@ -19,6 +19,7 @@
 // http(s) hosts are fetched (SSRF-guarded, same class as extract.ts).
 import type { NextApiRequest, NextApiResponse } from "next";
 import { setPrivateApiHeaders } from "@/Utils/apiValidation";
+import { getConfiguredSeedBaseUrl } from "@/Utils/domainDiscovery";
 import {
   findProviderById,
   buildEmbedUrl,
@@ -532,8 +533,7 @@ export default async function handler(
     }
   }
   if (!base && providerId === "hdhub4u") {
-    const env = (process.env.NEXT_PUBLIC_STREAM_URL || "").trim();
-    if (/^https?:\/\//i.test(env)) base = env.replace(/\/+$/, "");
+    base = getConfiguredSeedBaseUrl(providerId);
   }
   if (!base && provider.embedBase) base = provider.embedBase;
 

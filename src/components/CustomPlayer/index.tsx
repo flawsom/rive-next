@@ -50,7 +50,12 @@ interface CustomPlayerProps {
   onProgress?: (currentSeconds: number, durationSeconds: number) => void;
 }
 
-const isHlsUrl = (url: string) => /\.m3u8($|\?)/i.test(url);
+// Direct-mode URLs are either real media files or HLS endpoints. Providers
+// like 2Embed/VidEm serve HLS from extension-less URLs (_stream?id=…,
+// cap.php?…), so only known native-video extensions take the <video> path;
+// everything else goes through hls.js (which proxies every request).
+const isHlsUrl = (url: string) =>
+  !/\.(mp4|webm|ogv|ogg|mov|m4v|mkv|avi)(\?|$)/i.test(url);
 
 /** minimal SRT → WebVTT conversion (timestamps + clamp) */
 function srtToVtt(text: string): string {

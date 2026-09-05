@@ -1423,11 +1423,18 @@ const Watch = () => {
 
       {streamUrl === null && !iframeError && (
         <div className={styles.sourceMessage}>
-          <p>⚠️ Streaming source not configured.</p>
+          <p>⚠️ No working source for this title yet.</p>
           <p>
-            Please add <code>NEXT_PUBLIC_STREAM_URL</code> to your environment
-            variables with the embed URL.
+            <strong>{currentProvider?.name || "The selected source"}</strong>{" "}
+            couldn't be reached from here. Pick another source — it will be
+            verified before it plays.
           </p>
+          <button
+            className={styles.switchSourceBtn}
+            onClick={() => setShowSourceSelector(true)}
+          >
+            <BsArrowClockwise /> Switch Source
+          </button>
         </div>
       )}
 

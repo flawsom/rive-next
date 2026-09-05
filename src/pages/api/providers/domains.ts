@@ -205,11 +205,40 @@ export default async function handler(
           } catch {
             /* best effort */
           }
+          // Real-site signal: does the origin serve a sitemap? Parked landers
+          // and challenge stubs don't; WordPress movie sites do.
+          let sitemap = false;
+          if (response.ok && !response.redirected) {
+            try {
+              const origin = new URL("/sitemap.xml", url).toString();
+              const c2 = new AbortController();
+              const t2 = setTimeout(() => c2.abort(), 4_000);
+              const sm = await fetch(origin, {
+                method: "GET",
+                redirect: "follow",
+                signal: c2.signal,
+                headers: { "user-agent": "OpenStreamProbe/1.0" },
+              });
+              clearTimeout(t2);
+              if (sm.ok) {
+                const ct = sm.headers.get("content-type") || "";
+                sitemap = ct.includes("xml") || ct.includes("text/plain");
+              }
+              try {
+                await sm.body?.cancel();
+              } catch {
+                /* best effort */
+              }
+            } catch {
+              /* no sitemap */
+            }
+          }
           return res.status(200).json({
             url,
             status: response.status,
             ok: response.ok,
             latency: Date.now() - start,
+            sitemap,
           });
         } catch {
           return res

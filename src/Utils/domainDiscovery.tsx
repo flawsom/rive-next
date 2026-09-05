@@ -18,6 +18,8 @@ export interface DomainCandidate {
   provider: string;
   latency: number;
   available: boolean;
+  /** True when the domain serves a real /sitemap.xml (strong real-site signal). */
+  sitemap?: boolean;
   lastVerified: number;
   source: "repo" | "pattern" | "subdomain" | "fallback";
 }
@@ -54,12 +56,19 @@ const REPOS = [
 
 // ─── Known base domains for each provider ────────────────────────────────────
 // These are the canonical domains plus known mirrors/alternatives
+// Current live hdhub4u base URLs (operator-verified). These are only ever
+// used as *seeds*: every page URL built from them still passes the resolver's
+// server-side verification (real movie page, not a parked/CF shell) before
+// anything mounts, so an unreachable seed degrades to auto-switch, never to a
+// dead player.
+const HDHUB4U_SEED_DOMAINS = ["hdhub4u.tv", "hdhub4u.bi", "hdhub4u.com"];
+
 const PROVIDER_DOMAINS: Record<string, string[]> = {
   hdhub4u: [
+    "hdhub4u.tv",
+    "hdhub4u.bi",
     "hdhub4u.com",
     "www.hdhub4u.com",
-    "hdhub4u.bi",
-    "hdhub4u.tv",
     "hdhub4u.mx",
     "hdhub.cfd",
     "hdhub4u.nocensor.cloud",
@@ -374,7 +383,7 @@ export function ensureManifestHydrated(): Promise<void> {
 async function directProbe(
   url: string,
   timeoutMs: number,
-): Promise<{ available: boolean; latency: number }> {
+): Promise<{ available: boolean; latency: number; sitemap?: boolean }> {
   const start = Date.now();
   try {
     const controller = new AbortController();
@@ -400,7 +409,7 @@ async function directProbe(
 async function testDomain(
   url: string,
   timeoutMs = DOMAIN_TEST_TIMEOUT,
-): Promise<{ available: boolean; latency: number }> {
+): Promise<{ available: boolean; latency: number; sitemap?: boolean }> {
   if (typeof window !== "undefined") {
     try {
       const controller = new AbortController();
@@ -423,6 +432,9 @@ async function testDomain(
         return {
           available: reachable,
           latency: reachable ? data.latency : Infinity,
+          // Real WordPress movie sites expose sitemaps; parked landers and
+          // challenge stubs don't. Prefer sitemap-bearing domains.
+          sitemap: reachable ? !!data.sitemap : false,
         };
       }
     } catch {
@@ -598,12 +610,13 @@ export async function discoverDomains(
     const batch = uniqueCandidates.slice(i, i + BATCH_SIZE);
     const tests = batch.map(async (domain) => {
       const url = domain.startsWith("http") ? domain : `https://${domain}`;
-      const { available, latency } = await testDomain(url);
+      const { available, latency, sitemap } = await testDomain(url);
       return {
         url,
         provider: providerId,
         latency,
         available,
+        sitemap,
         lastVerified: Date.now(),
         source: knownDomains.includes(domain)
           ? ("pattern" as const)
@@ -616,7 +629,11 @@ export async function discoverDomains(
     const results = await Promise.all(tests);
     results
       .filter((r) => r.available)
-      .sort((a, b) => a.latency - b.latency)
+      // Real sites with sitemaps rank above anonymous 200 shells.
+      .sort((a, b) => {
+        if (!!a.sitemap !== !!b.sitemap) return a.sitemap ? -1 : 1;
+        return a.latency - b.latency;
+      })
       .forEach((r) => workingDomains.push(r));
   }
 
@@ -686,6 +703,23 @@ function normalizeConfiguredBaseUrl(raw: string | undefined): string | null {
   return normalized.replace(/\/+$/, "");
 }
 
+/**
+ * Operator-configured base URL (NEXT_PUBLIC_STREAM_URL), falling back to the
+ * current verified hdhub4u seed mirrors. Everything built from these is still
+ * verification-gated before mounting (see /api/providers/resolve), so a stale
+ * seed can never mount a dead player — it just feeds the auto-switch pipeline.
+ */
+export function getConfiguredSeedBaseUrl(providerId: string): string | null {
+  const configured = normalizeConfiguredBaseUrl(
+    process.env.NEXT_PUBLIC_STREAM_URL,
+  );
+  if (configured) return configured;
+  if (providerId === "hdhub4u") {
+    return normalizeConfiguredBaseUrl(HDHUB4U_SEED_DOMAINS[0]);
+  }
+  return null;
+}
+
 export function getCachedDomain(providerId: string): string | null {
   if (liveDomainMap[providerId]) {
     return liveDomainMap[providerId];
@@ -694,11 +728,8 @@ export function getCachedDomain(providerId: string): string | null {
   if (cached?.workingDomains?.length > 0) {
     return cached.workingDomains[0].url;
   }
-  // Only the configured default source may be used without a successful probe.
-  if (providerId === "hdhub4u") {
-    return normalizeConfiguredBaseUrl(process.env.NEXT_PUBLIC_STREAM_URL);
-  }
-  return null;
+  // Seeds are verification-gated upstream, so they're safe as a last resort.
+  return getConfiguredSeedBaseUrl(providerId);
 }
 
 /**
