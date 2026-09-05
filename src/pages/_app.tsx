@@ -14,6 +14,37 @@ import "react-loading-skeleton/dist/skeleton.css";
 export default function App({ Component, pageProps }: any) {
   const [isLoading, setIsLoading] = useState(false);
   NProgress.configure({ showSpinner: false });
+
+  // ── Stale service-worker eviction ───────────────────────────────
+  // This app shipped as a next-pwa PWA in the past. The SW that era
+  // installed is STILL registered in every returning visitor's browser and
+  // serves cached old JS bundles (precache), so users see stale UI no
+  // matter what deploys. next-pwa is gone from the build, so the SW file
+  // 404s — but browsers keep a 404-ing SW until it's explicitly
+  // unregistered. Evict it and burn its caches on load.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator))
+      return;
+    const evict = async () => {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      } catch {
+        /* best effort */
+      }
+      try {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter((k) => /^workbox|^next-pwa|^open-stream/i.test(k))
+            .map((k) => caches.delete(k)),
+        );
+      } catch {
+        /* best effort */
+      }
+    };
+    evict();
+  }, []);
   // NProgress.configure({
   //   template: '<div class="bar" role="bar"><div class="peg"></div></div>'
   // });

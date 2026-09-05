@@ -12,13 +12,12 @@
     z-index: 0;
   }
   .iframe {
-    /* The playing surface is THE screen: absolutely positioned above the
-       document flow so content rows (More Like This) can never flex-squeeze
-       it into a sliver. */
-    position: absolute;
+    /* fixed, not absolute: same reasoning as .playerLayer — the playing
+       surface must fill the viewport no matter what ancestors do. */
+    position: fixed;
     inset: 0;
-    height: 100%;
     width: 100%;
+    height: 100%;
     border: none;
     outline: none;
     overflow: hidden;
@@ -28,7 +27,11 @@
     }
   }
   .playerLayer {
-    position: absolute;
+    /* fixed, not absolute: the Layout wraps pages in a framer-motion div
+       (transform = containing block for BOTH absolute and fixed), and the
+       watch page itself is a flex row. A viewport-fixed layer can't be
+       squeezed or offset by any ancestor. */
+    position: fixed;
     inset: 0;
     z-index: 1;
     background: #000;
