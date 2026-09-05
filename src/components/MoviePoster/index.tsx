@@ -8,12 +8,22 @@ import Link from "next/link";
 import { LazyLoadImage } from "react-lazy-load-image-component";
 import "react-lazy-load-image-component/src/effects/opacity.css";
 import { TMDB_IMAGE_URL } from "@/Utils/imageUrl";
+import { safeDetailHref } from "@/Utils/safeLinks";
 const MoviePoster = ({ data, media_type }: any) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [imagePlaceholder, setImagePlaceholder] = useState(false);
+  // Never emit a dead link. MoviePoster used to build `/detail?type=undefined
+  // &id=…` whenever the payload lacked media_type (TMDB detail responses have
+  // no media_type field, and MoviePoster is passed data only on /detail).
+  const link = safeDetailHref(
+    data,
+    media_type || data?.media_type || data?.type,
+  );
+  if (!link)
+    return <div className={styles.MovieCardSmall} aria-hidden="true" />;
   return (
     <Link
-      href={`/detail?type=${media_type}&id=${data?.id}`}
+      href={link}
       className={styles.MovieCardSmall}
       aria-label={data?.name || "poster"}
     >

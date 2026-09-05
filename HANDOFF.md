@@ -5,6 +5,65 @@ Everything below was verified against the working tree at commit `b92f118`
 
 ---
 
+## ⚡ Session 2 update — Sept 5 2026 (tree now DIRTY; changes not yet pushed)
+
+Ran the §3 verification suite against the live URL (Vercel egress, not
+localhost). Everything below is production evidence, captured 13:00–14:00 UTC.
+
+### Playback verification results (13 titles: real Top-10-IN trending + 3 classics)
+
+| Tier                    | Result               | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Universal id-routed** | ✅ plays-by-design   | `resolve` 2Embed **9/13 OK** (server-verified <title>), VidLink **13/13 OK** (id-route 200s; catalog-blind fail-open by design). `/watch` "best" for movie → 2Embed. So every acceptance title gets a mounted embed.                                                                                                                                                                                                                               |
+| **hdhub4u (HDF)**       | ❌ 0/13 today        | **Every candidate domain is parked/squatted**: `hdhub4u.unblockit.pages.dev` (the `NEXT_PUBLIC_STREAM_URL` seed) → 404 root; `hdhub4u.com` redirects `/movie/*` to `view.secure-password.online` or serves a 486-byte "Loading..." SPA stub; `hdhub4u.fit` serves ONE identical 35 KB "Safe & Legal…Guide" page for any URL; nocensor/unblockninja/mrunblock → unreachable from Vercel. Resolver fast-misses in ~1.3 s (b92f118 shell gate works). |
+| **moviesdrive**         | ❌ unreachable today | `moviesdrive.pics` → redirects to `moviesdrives.cfd`, one static "Movie Reviews…" guide page for any URL; every other mirror times out from Vercel.                                                                                                                                                                                                                                                                                                |
+| Manifest                | ✅ works             | Cold manifest endpoint showed 0 providers until first sync; after `POST manifest?action=sync` → **84 providers / 95 domains**, `builtAt` set, both repos tracked. Earlier `0` was cold-start, not a bug.                                                                                                                                                                                                                                           |
+
+### Real bugs found & fixed in this session (typecheck ✅ — NOT yet deployed)
+
+1. **Tokenless-title shell hole** (`resolve.ts`): titles whose tokens are all
+   filtered by `normalizeTitle` (≤2 chars, e.g. "DC") short-circuited
+   `pageMentionsTitle` → **any** 200 page was accepted as a "direct" hit.
+   Verified live: `DC (1479832)` resolved `ok:true direct` against parked
+   shells on BOTH hdhub4u.fit and moviesdrive.pics in ~220 ms — the exact
+   silent no-play class b92f118 meant to kill. Fix: tokenless titles now
+   require the page's `<title>` to contain the verbatim name AND the year;
+   plus a new `looksLikeShellPage` gate rejects parked redirects (final URL
+   host ≠ requested host), "Loading..." stubs, CF challenges, and squatter
+   guide titles for ALL titles, not just tokened ones.
+2. **Extract 404'd before honoring pageUrl** (`extract.ts`): the endpoint
+   required a server-side domain cache first, so MoviesDrive (no env seed,
+   no server cache) returned 404 even when the watch page passed a valid
+   title-resolved `pageUrl`. Now a validated client `pageUrl` is primary and
+   the naive embed is only the fallback.
+3. **`detail?type=undefined&id=undefined` traced** (long-open question):
+   `MoviePoster` builds its own href and is rendered on `/detail` as
+   `<MoviePoster data={data} />` with NO media_type — TMDB detail payloads
+   have no `media_type`, so the poster linked to itself with `type=undefined`.
+   All card emitters were already guarded (`safeDetailHref`); MoviePoster was
+   the one holdout. Now guarded + call site passes `type`. Also tightened
+   `Navbar` Surprise Me to require a valid type alongside the id.
+4. **README PWA claims reconciled**: no service worker is built (next-pwa
+   disabled in `next.config.mjs`) and `manifest.json` wasn't even linked.
+   Docs now say "installable shell, online-first"; manifest+icons are linked
+   in `_document.tsx` (zero-risk), so mobile browsers can A2HS.
+
+### Still open / next agent must do
+
+- **Browser-level video confirmation is still missing.** curl proves resolve,
+  domain state, and embed availability — it cannot prove a `<video>` frame
+  advanced. Open `/watch?type=movie&id=1213243` (and 9 more) on the live URL
+  after the push and confirm pixels/time advance; repeat `/detail → play`.
+- **hdhub4u/moviesdrive "plays from X" cannot pass until real domains exist**
+  — the catalog domains are parked today (outside repo control; they rotate
+  weekly). Watch the discovery pool; when a genuine mirror comes back the
+  resolver pipeline will use it. Consider updating `PROVIDER_DOMAINS` +
+  `NEXT_PUBLIC_STREAM_URL` (Vercel env) once a verified catalog domain is up.
+- Changes above are unstaged/unpushed on `dev` — the user pushes when ready;
+  Vercel auto-deploys the branch.
+
+---
+
 ## 1. What this project is
 
 - **Open Stream** — a self-hosted streaming UI (rebrand of the original

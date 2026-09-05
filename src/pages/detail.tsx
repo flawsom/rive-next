@@ -308,7 +308,7 @@ const DetailPage = () => {
             >
               {data?.vote_average?.toFixed(1)}
             </div>
-            <MoviePoster data={data} />
+            <MoviePoster data={data} media_type={type as string} />
           </div>
           <div className={styles.HomeHeroMeta}>
             <h1

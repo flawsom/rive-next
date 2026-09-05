@@ -54,7 +54,7 @@ function isPublicHostname(hostname: string): boolean {
 async function fetchText(
   url: string,
   timeoutMs: number,
-): Promise<{ status: number; html: string } | null> {
+): Promise<{ status: number; html: string; finalUrl: string } | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -68,9 +68,9 @@ async function fetchText(
       },
     });
     clearTimeout(timer);
-    if (!res.ok) return { status: res.status, html: "" };
+    if (!res.ok) return { status: res.status, html: "", finalUrl: res.url };
     const html = await res.text();
-    return { status: res.status, html };
+    return { status: res.status, html, finalUrl: res.url };
   } catch {
     return null;
   }
@@ -86,6 +86,41 @@ function looksLikeNotFound(html: string): boolean {
     /no results found/.test(head) ||
     /404\s*(not found|error)?<\/title>/.test(head) ||
     /<title>[^<]*404[^<]*<\/title>/.test(head)
+  );
+}
+
+// ─── Shell / parked-page rejection ───────────────────────────────────────
+// Real-world shells that must never count as a hit even though they answer
+// HTTP 200:
+//  * Parked-domain redirects — provider domains that rotated into a
+//    monetization page answer 200 but land somewhere else entirely
+//    (observed live Sept 2026: hdhub4u.com/movie/* → view.secure-password.online).
+//  * Squatter guide/SEO pages — ONE static "streaming guide" page served for
+//    every URL on the domain (observed live: hdhub4u.fit, moviesdrive.pics
+//    → moviesdrives.cfd answer 200 for /movie/{id} AND /?s= with identical
+//    body that never mentions the title).
+//  * JS-bootstrapped stubs whose raw HTML has no content (a 486-byte page
+//    whose <title> is literally "Loading...").
+function looksLikeShellPage(
+  html: string,
+  finalUrl: string,
+  requestedUrl: string,
+): boolean {
+  if (!html) return true;
+  try {
+    const finalHost = new URL(finalUrl).hostname.replace(/^www\./, "");
+    const requestedHost = new URL(requestedUrl).hostname.replace(/^www\./, "");
+    if (finalHost !== requestedHost) return true; // parked/redirector
+  } catch {
+    // fall through to content checks
+  }
+  const head = html.slice(0, 12000).toLowerCase();
+  return (
+    /<title>\s*loading\.\.\./.test(head) ||
+    /just a moment|attention required|cf-?challenge/i.test(head) ||
+    /<title>[^<]*(streaming guide|movie reviews|trailers\s*&|safe & legal|official\s*\d{4})[^<]*<\/title>/.test(
+      head,
+    )
   );
 }
 
@@ -201,10 +236,26 @@ function stripTags(s: string): string {
  * JS homepage for ANY id route, and some mirrors redirect to unrelated sites —
  * both "verify" a page that will never play. Token coverage handles inflected
  * or decorated titles ("Panchayat Season 1", "Toxic: A Fairy Tale…").
+ *
+ * Tokenless titles ("DC", "MI" — everything under ~3 chars is filtered by
+ * normalizeTitle) can't use coverage math; a 200 shell used to be accepted
+ * blindly for them. Verified live: "DC" resolved "direct" against parked
+ * guide shells on both hdhub4u.fit and moviesdrive.pics in ~220ms. For these
+ * titles the page must prove identity verbatim: its <title> must contain the
+ * exact name AND the release year (real provider posts read "DC (2026) …";
+ * squatter pages never name the queried title).
  */
-function pageMentionsTitle(html: string, title: string): boolean {
+function pageMentionsTitle(html: string, title: string, year: string): boolean {
   const tokens = normalizeTitle(title);
-  if (tokens.length === 0) return true; // no title → existence check only
+  if (tokens.length === 0) {
+    const pageTitle = (
+      html.match(/<title>([^<]*)<\/title>/i)?.[1] || ""
+    ).toLowerCase();
+    if (!pageTitle) return false;
+    const q = decodeEntities(title).trim().toLowerCase();
+    if (!q || !pageTitle.includes(q)) return false;
+    return !!year && pageTitle.includes(year);
+  }
   const text = stripTags(html).toLowerCase();
   const hits = tokens.filter((t) => text.includes(t)).length;
   return hits / tokens.length >= 0.6;
@@ -559,7 +610,10 @@ export default async function handler(
       !looksLikeNotFound(direct.html) &&
       // WordPress shells answer 200 for ANY id route with an identical
       // homepage — require the page to actually carry the title when known.
-      pageMentionsTitle(direct.html, title)
+      // Redirected (parked) domains and squatter guide pages are rejected
+      // outright regardless of title length.
+      !looksLikeShellPage(direct.html, direct.finalUrl, naiveUrl) &&
+      pageMentionsTitle(direct.html, title, year)
     ) {
       const entry: CacheEntry = {
         at: Date.now(),
@@ -603,7 +657,8 @@ export default async function handler(
           page &&
           page.status === 200 &&
           !looksLikeNotFound(page.html) &&
-          pageMentionsTitle(page.html, title)
+          !looksLikeShellPage(page.html, page.finalUrl, candidate.url) &&
+          pageMentionsTitle(page.html, title, year)
         ) {
           const entry: CacheEntry = {
             at: Date.now(),
@@ -634,7 +689,8 @@ export default async function handler(
         page &&
         page.status === 200 &&
         !looksLikeNotFound(page.html) &&
-        pageMentionsTitle(page.html, title)
+        !looksLikeShellPage(page.html, page.finalUrl, candidate) &&
+        pageMentionsTitle(page.html, title, year)
       ) {
         const entry: CacheEntry = {
           at: Date.now(),

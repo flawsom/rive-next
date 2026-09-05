@@ -165,29 +165,17 @@ export default async function handler(
       .json({ error: "Valid providerId, type and id are required" });
   }
 
-  // Build the embed URL the way the watch page does.
-  const domain = getCachedDomain(providerId);
+  // Build the page URL the watch page will mount. The client's title-resolved
+  // page URL (from /api/providers/resolve) wins: WordPress-class providers do
+  // not expose /movie/{tmdbId} routes, and the serverless instance often has
+  // NO cached domain for a provider the *client* verified via its own browser
+  // discovery (e.g. MoviesDrive — only HDHub4U has an env seed). A valid
+  // pageUrl must therefore never be rejected just because the provider has no
+  // server-side domain cache.
   const provider = findProviderById(providerId)!;
-  const base =
-    domain || provider.embedBase
-      ? `${domain || provider.embedBase}`.replace(/\/$/, "")
-      : null;
-  if (!base) return res.status(404).json({ error: "Provider has no domain" });
-  const baseUrl = base.startsWith("http") ? base : `https://${base}`;
-
-  const embedUrl =
-    type === "movie"
-      ? `${baseUrl}/movie/${id}`
-      : season && episode
-        ? `${baseUrl}/tv/${id}/${season}/${episode}`
-        : `${baseUrl}/tv/${id}`;
-
-  // The watch page may pass a title-resolved page URL (from /api/providers/resolve).
-  // WordPress-class providers do not expose /movie/{tmdbId} routes — scraping
-  // the naive URL guarantees zero streams, so the resolved page wins when given.
-  let primaryUrl = embedUrl;
   const clientPageUrl =
     typeof req.query.pageUrl === "string" ? req.query.pageUrl.trim() : "";
+  let primaryUrl: string | null = null;
   if (clientPageUrl) {
     try {
       const parsed = new URL(clientPageUrl);
@@ -198,9 +186,24 @@ export default async function handler(
         primaryUrl = clientPageUrl;
       }
     } catch {
-      // ignore malformed pageUrl, keep naive embed
+      // ignore malformed pageUrl, fall back to the naive embed below
     }
   }
+  if (!primaryUrl) {
+    const domain = getCachedDomain(providerId);
+    const base = domain || provider.embedBase || null;
+    if (base) {
+      const baseUrl = base.startsWith("http") ? base : `https://${base}`;
+      primaryUrl =
+        type === "movie"
+          ? `${baseUrl}/movie/${id}`
+          : season && episode
+            ? `${baseUrl}/tv/${id}/${season}/${episode}`
+            : `${baseUrl}/tv/${id}`;
+    }
+  }
+  if (!primaryUrl)
+    return res.status(404).json({ error: "Provider has no domain" });
 
   if (!isPublicHostname(new URL(primaryUrl).hostname)) {
     return res.status(400).json({ error: "Embed host not allowed" });
@@ -250,7 +253,7 @@ export default async function handler(
     candidates.push(
       ...(await extractFromApis(
         providerId,
-        embedUrl,
+        primaryUrl,
         Math.max(0, deadline - Date.now()),
       )),
     );

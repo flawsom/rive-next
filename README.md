@@ -157,10 +157,17 @@ Runs perfectly in **local guest mode** when Firebase isn't configured.
 </td>
 <td width="33%" valign="top">
 
-### 📱 Installable PWA
+### 📱 Installable Shell (online-first)
 
-Responsive, offline-aware, installable. Poster grids, skeletons, and
-keyboard-first controls (`/` search, `Shift+N/P/M/S/D`).
+Web manifest + icons let mobile browsers add Open Stream to the home screen
+with a standalone window. Poster grids, skeletons, and keyboard-first
+controls (`/` search, `Shift+N/P/M/S/D`).
+
+> [!NOTE]
+> The offline service worker (next-pwa) is currently **disabled** — its build
+> hooks destabilized memory-constrained builds (see `next.config.mjs`). The
+> app is therefore online-first today; the manifest/icons are kept as the
+> installable shell so a worker can be re-enabled where builds allow.
 
 </td>
 <td width="33%" valign="top">
@@ -245,7 +252,7 @@ both GitHub themes.
 | :-------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------: |
 | ![Home — hero, Continue Watching with progress, glass nav](.github/assets/gallery-desktop-home.svg) | ![Watch page — player with quality chip and AI source-routing panel](.github/assets/gallery-watch-sources.svg) |
 
-|                                       Mobile PWA                                        |                                       Library + Cloud Sync                                       |
+|                                       Mobile app                                        |                                       Library + Cloud Sync                                       |
 | :-------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------: |
 | ![Mobile — hero, poster rows, bottom navigation](.github/assets/gallery-mobile-pwa.svg) | ![Library — filter chips, poster grid, sync status bar](.github/assets/gallery-library-sync.svg) |
 
@@ -300,7 +307,7 @@ in `.github/assets/` — the README layout stays intact.
 flowchart TB
     subgraph CLIENT["🖥 Client — Next.js 14 · React 18 · TypeScript"]
         UI["App UI — Home · Search · Detail · Watch<br/>Library · Collections · Sources · Settings"]
-        SW["Service Worker — offline shell<br/>installable PWA"]
+        PWA["Installable shell — web manifest + icons<br/>online-first (SW disabled)"]
         LS["Local-first state — bookmarks<br/>continue-watching · settings"]
     end
 
@@ -330,7 +337,7 @@ flowchart TB
     UI --> PROV
     UI --> AI
     UI --> MEDIA
-    UI -.-> SW
+    UI -.-> PWA
     UI --- LS
 
     PROV --> REG
@@ -371,7 +378,7 @@ flowchart TB
 ![TypeScript](https://img.shields.io/badge/TypeScript_5-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![Sass](https://img.shields.io/badge/Sass-CC6699?style=flat-square&logo=sass&logoColor=white)
 ![Framer Motion](https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer&logoColor=white)
-![PWA](https://img.shields.io/badge/PWA_offline-ready-5A0FC8?style=flat-square&logo=pwa&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA_manifest-5A0FC8?style=flat-square&logo=pwa&logoColor=white)
 
 **Backend**
 ![Next API](https://img.shields.io/badge/Next.js_API_Routes-000000?style=flat-square&logo=next.js&logoColor=white)
@@ -558,7 +565,7 @@ open-stream/
 │   │   ├── library.tsx · downloads.tsx · sources.tsx
 │   │   ├── ai.tsx             #   AI assistant page
 │   │   ├── login.tsx · signup.tsx · settings.tsx
-│   │   ├── 404.tsx · _offline.tsx · disclaimer.tsx
+│   │   ├── 404.tsx · _offline.tsx · disclaimer.tsx  # _offline: SW-optional fallback page
 │   │   └── api/
 │   │       ├── ai/            #   chat · recommend · insights · search · polish
 │   │       ├── providers/     #   sources · domains · manifest
@@ -828,13 +835,13 @@ curl -X POST "https://<your-deployment>/api/providers/manifest?action=sync"
 <table>
 <tr>
 <th align="center">Lighthouse Performance</th>
-<th align="center">Lighthouse PWA</th>
+<th align="center">Installability</th>
 <th align="center">TTI</th>
 <th align="center">LCP</th>
 </tr>
 <tr>
 <td align="center"><strong>90+</strong><br/><sub>target on mid-range mobile</sub></td>
-<td align="center"><strong>Installable</strong><br/><sub>offline shell via SW</sub></td>
+<td align="center"><strong>Manifest ready</strong><br/><sub>installable shell; SW disabled for build stability</sub></td>
 <td align="center"><strong>&lt; 2.5s</strong><br/><sub>warm route, cached posters</sub></td>
 <td align="center"><strong>&lt; 1.8s</strong><br/><sub>hero-first rendering</sub></td>
 </tr>
@@ -952,7 +959,8 @@ has the full guide; the short version:
 - [x] Real continue-watching with visible-tab progress tracking
 - [x] Up Next auto-advance + silent-hang watchdog
 - [x] Firebase auth with optional cloud sync + guest mode
-- [x] Installable PWA with offline shell
+- [x] Installable shell (web manifest + icons) — offline SW parked (next-pwa
+      disabled for build stability; see `next.config.mjs`)
 - [x] Hardened media proxy (SSRF guard, Range passthrough, timeouts)
 - [x] 161-assertion E2E coverage in LIVE mode
 - [ ] **Direct stream extraction** — in-app player with subtitle search, tracks and quality switching

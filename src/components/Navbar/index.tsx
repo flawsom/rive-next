@@ -54,7 +54,12 @@ const Navbar = ({ children }: any) => {
         `/api/backendfetch?requestID=random&_=${Date.now()}`,
       );
       const data = await response.json();
-      if (data?.result?.id) {
+      // Guard BOTH halves of the URL: an id without a valid type used to emit
+      // /detail?type=undefined&id=<id>.
+      if (
+        data?.result?.id &&
+        ["movie", "tv", "collection"].includes(data?.result?.type)
+      ) {
         router.push(`/detail?type=${data.result.type}&id=${data.result.id}`);
       }
     } catch {
