@@ -387,6 +387,17 @@ This poster row beside it, and the provider's own embed player showing.
    JS-driven universal players and added ~10s serial latency). Extract
    timing on production after the fix: **1.4–1.8s** (was ~10s).
 
+### Session 6d (Sept 6, `a7fb109`) — the stale service worker, finally
+
+The user STILL saw the pre-fix layout after verified deploys. Root cause:
+the app shipped as a next-pwa PWA in the past — that SW is still registered
+in returning visitors' browsers, serving precached old JS forever (browsers
+keep a 404-ing SW until explicitly unregistered). `_app.tsx` now
+unregisters all service workers and deletes workbox/next-pwa caches on
+load. Playback layers are also `position:fixed` now (the Layout's
+framer-motion wrapper is transform → containing block for absolute too).
+README's PWA claim must go — the manifest is kept but the app is not a PWA.
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
