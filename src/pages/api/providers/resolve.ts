@@ -296,9 +296,26 @@ async function verifyUniversalEmbed(
   provider: Provider,
   url: string,
 ): Promise<CacheEntry> {
+  if (provider.urlPattern === "tmdb-path") {
+    // VidLink-style routes: status codes are a real availability oracle.
+    // The embed plays exactly when the route answers 200; missing titles and
+    // broken TV routes answer 404/500 (observed live). A transient failure
+    // (network error) must NOT be cached as a miss — fail open instead, so
+    // an embed that might play is still tried by the player.
+    try {
+      const res = await fetchText(url, 7_000);
+      if (res && res.status === 200 && res.html && !looksLikeNotFound(res.html))
+        return { at: Date.now(), url, method: "direct", searchUrl: null };
+      if (res === null)
+        return { at: Date.now(), url, method: "direct", searchUrl: null }; // fail open
+    } catch {
+      return { at: Date.now(), url, method: "direct", searchUrl: null }; // fail open
+    }
+    return { at: Date.now(), url: null, method: "direct", searchUrl: null };
+  }
   if (provider.urlPattern !== "2embed") {
-    // Id-routed without a server-verifiable existence check — the embed is
-    // authoritative for these providers.
+    // Other id-routed providers: no server-verifiable existence check — the
+    // embed is authoritative.
     return { at: Date.now(), url, method: "direct", searchUrl: null };
   }
   if (!TWOEMBED_EMBED_URL_RE.test(url)) {
