@@ -909,7 +909,14 @@ const Watch = () => {
       );
       if (response.ok) {
         const selection = await response.json();
-        if (selection.provider.id !== currentProvider.id) {
+        // Only switch to a provider we haven't already tried — re-picking a
+        // failed one (this used to only exclude the CURRENT provider) is
+        // exactly the infinite "Trying X…" cascade the user saw.
+        if (
+          selection.provider.id !== currentProvider.id &&
+          !triedProvidersRef.current.has(selection.provider.id)
+        ) {
+          triedProvidersRef.current.add(selection.provider.id);
           setPreviousProviderName(currentProvider.name);
           setIsAutoSwitched(true);
           setCurrentProvider(selection.provider);
@@ -922,6 +929,8 @@ const Watch = () => {
             position: "top-center",
           });
         } else {
+          // Every provider has been tried — stop the cascade and hand the
+          // choice back to the user instead of looping forever.
           setIframeError(true);
           toast.error("All sources are currently unavailable", {
             description: "Please try again later or select a different source",

@@ -61,18 +61,24 @@ const REPOS = [
 // server-side verification (real movie page, not a parked/CF shell) before
 // anything mounts, so an unreachable seed degrades to auto-switch, never to a
 // dead player.
-const HDHUB4U_SEED_DOMAINS = ["hdhub4u.tv", "hdhub4u.bi", "hdhub4u.com"];
+const HDHUB4U_SEED_DOMAINS = [
+  "hdhub4u.tv",
+  "hdhub4u.bi",
+  "new1.hdhub4u.cl",
+  "hdhub4u.com",
+];
 
 const PROVIDER_DOMAINS: Record<string, string[]> = {
   hdhub4u: [
     "hdhub4u.tv",
     "hdhub4u.bi",
+    "new1.hdhub4u.cl",
+    "hdhub4u.how",
     "hdhub4u.com",
     "www.hdhub4u.com",
     "hdhub4u.mx",
     "hdhub.cfd",
     "hdhub4u.nocensor.cloud",
-    "hdhub4u.unblockit.pages.dev",
     "hdhub4u.unblockninja.com",
     "hdhub4u.mrunblock.buzz",
     "hdhub4u Unblock",
@@ -426,7 +432,7 @@ async function testDomain(
         const reachable =
           typeof data.status === "number" &&
           data.status >= 200 &&
-          data.status < 500 &&
+          data.status < 400 &&
           typeof data.latency === "number" &&
           data.latency > 0;
         return {
