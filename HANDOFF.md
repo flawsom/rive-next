@@ -398,6 +398,19 @@ load. Playback layers are also `position:fixed` now (the Layout's
 framer-motion wrapper is transform → containing block for absolute too).
 README's PWA claim must go — the manifest is kept but the app is not a PWA.
 
+### Session 6e (Sept 6, `3d40224`) — the full-screen JSON explained
+
+Screenshot: raw `{"error":"unavailable"}` filling the watch page. That's
+videm.xyz's answer for expired/unknown stream tokens (404 JSON). Chain:
+extraction HEAD-verified a stream, assigned it, but the playback-mode
+effect re-probed the extension-less URL because the verdict wasn't cached —
+the token expired between probes, the URL got classified "embed", and the
+iframe mounted the raw stream API. Fix: cache the verdict before assigning,
+require `res.ok` on the probe, and dead videm stream URLs route into the
+source-failure pipeline (Switch Source), never into an iframe src.
+Confirmed live in the deployed bundle + full chain smoke test (extract 2.5s,
+proxy HEAD 200 `application/x-mpegurl`).
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
