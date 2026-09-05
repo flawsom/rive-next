@@ -19,7 +19,11 @@
 // http(s) hosts are fetched (SSRF-guarded, same class as extract.ts).
 import type { NextApiRequest, NextApiResponse } from "next";
 import { setPrivateApiHeaders } from "@/Utils/apiValidation";
-import { findProviderById } from "@/Utils/providers";
+import {
+  findProviderById,
+  buildEmbedUrl,
+  type Provider,
+} from "@/Utils/providers";
 
 export const maxDuration = 30;
 
@@ -265,7 +269,70 @@ function cacheKey(parts: (string | undefined)[]): string {
   return parts.filter((p) => p !== undefined && p !== "").join("|");
 }
 
-// ─── Search-index fallback ───────────────────────────────────────────────────
+// ─── Universal-embed verification (2Embed) ─────────────────────────────────
+// 2Embed answers HTTP 200 for TMDB ids it does NOT have — the iframe mounts,
+// fires onLoad, and plays nothing (the exact "loads but never plays" bug).
+// Availability oracle: the OUTER page title. Inner /embed pages mirror TMDB
+// metadata for ANY existing TMDB id ("Toxic (2026)" even with no servers),
+// but outer pages name only playable titles:
+//   /movie/{id}  hit: "Inception (2010) - 2Embed"   miss: " () - 2Embed"
+//   /tv/{id}     hit: "Breaking Bad - TvShow - 2Embed"
+//                miss: "Unknown TV Show - TvShow - 2Embed"
+// So: verify the outer route, then return the inner embed URL to mount.
+function twoembedOuterUrl(embedUrl: string): string | null {
+  const m = embedUrl.match(
+    /^(https?:\/\/[^/]*2embed\.cc)\/embed(?:tv)?\/(\d+)/i,
+  );
+  if (!m) return null;
+  const [, base, id] = m;
+  return /\/embedtv\//i.test(embedUrl)
+    ? `${base}/tv/${id}`
+    : `${base}/movie/${id}`;
+}
+const TWOEMBED_EMBED_URL_RE =
+  /https?:\/\/[^\s"'<>]*2embed\.cc\/embed(?:tv)?\/[^\s"'<>]+/i;
+
+async function verifyUniversalEmbed(
+  provider: Provider,
+  url: string,
+): Promise<CacheEntry> {
+  if (provider.urlPattern !== "2embed") {
+    // Id-routed without a server-verifiable existence check — the embed is
+    // authoritative for these providers.
+    return { at: Date.now(), url, method: "direct", searchUrl: null };
+  }
+  if (!TWOEMBED_EMBED_URL_RE.test(url)) {
+    return { at: Date.now(), url: null, method: "direct", searchUrl: null };
+  }
+  const outer = twoembedOuterUrl(url);
+  if (!outer) {
+    return { at: Date.now(), url: null, method: "direct", searchUrl: null };
+  }
+  try {
+    const res = await fetchText(outer, 7_000);
+    const raw = res?.html.match(/<title>([^<]*)<\/title>/i)?.[1] || "";
+    // Strip the " - 2Embed" / " - TvShow - 2Embed" suffixes, then decide.
+    const titleText = raw.replace(/-\s*2Embed.*$/i, "").trim();
+    const isUnknownShow = /^unknown tv show/i.test(titleText);
+    const hasName = /\w/.test(titleText.replace(/[()]/g, " "));
+    const ok =
+      !!res &&
+      res.status === 200 &&
+      !!res.html &&
+      !looksLikeNotFound(res.html) &&
+      !isUnknownShow &&
+      hasName;
+    if (ok) {
+      // The inner embed URL is what the watch page mounts.
+      return { at: Date.now(), url, method: "direct", searchUrl: null };
+    }
+  } catch {
+    // network failure — treat as unverifiable miss
+  }
+  return { at: Date.now(), url: null, method: "direct", searchUrl: null };
+}
+
+// ─── Search-index fallback ─────────────────────────────────────────────
 // When the provider's own search is unreachable (Cloudflare-class blocks hit
 // datacenter IPs first), DuckDuckGo's HTML endpoint can still reveal the
 // provider's post URL via a `site:` query. Fails soft — this is extra
@@ -397,6 +464,37 @@ export default async function handler(
           : `${base}/tv/${id}`;
   const searchUrl =
     base === null || !title ? null : `${base}/?s=${encodeURIComponent(title)}`;
+
+  // Universal id-routed embeds: verify the exact embed URL the watch page will
+  // mount (2Embed's /embed page exposes availability server-side; vidlink has
+  // no such signal and stays authoritative for its id routes).
+  if (provider.urlPattern) {
+    const embedUrl = buildEmbedUrl(
+      provider,
+      type as "movie" | "tv",
+      id,
+      season ? parseInt(season) : undefined,
+      episode ? parseInt(episode) : undefined,
+    );
+    if (!embedUrl) {
+      return res.status(200).json({ ok: false, url: null, method: "direct" });
+    }
+    const uKey = cacheKey([providerId, type, id, season, episode]);
+    const cachedU = resolveCache.get(uKey);
+    if (cachedU && Date.now() - cachedU.at < RESOLVE_TTL) {
+      return res.status(200).json({
+        ok: !!cachedU.url,
+        url: cachedU.url,
+        method: cachedU.method,
+        cached: true,
+      });
+    }
+    const verdict = await verifyUniversalEmbed(provider, embedUrl);
+    resolveCache.set(uKey, verdict);
+    return res
+      .status(200)
+      .json({ ok: !!verdict.url, url: verdict.url, method: verdict.method });
+  }
 
   // Serve from cache when fresh.
   const key = cacheKey([providerId, type, id, season, episode, base || ""]);

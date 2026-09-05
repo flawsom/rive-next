@@ -388,9 +388,10 @@ const Watch = () => {
 
   useEffect(() => {
     if (!currentProvider || !id || !type) return;
-    // Universal id-routed providers (VidLink/2Embed/VidSrc) embed ANY title
-    // straight from its TMDB id — no verification needed, playback is instant
-    // and never depends on a provider site having the title.
+    // Universal id-routed providers (VidLink/2Embed) embed by TMDB id. 2Embed
+    // answers 200 even when it lacks the title (dead embed, silent player),
+    // so its exact embed URL is verified server-side first — a miss fails fast
+    // into the auto-switch pipeline instead of a silent dead player.
     if (currentProvider.urlPattern) {
       const url = buildEmbedUrl(
         currentProvider,
@@ -399,13 +400,42 @@ const Watch = () => {
         season ? parseInt(season) : undefined,
         episode ? parseInt(episode) : undefined,
       );
-      if (url) {
-        setResolvedPage({ url, method: "universal" });
-        setResolveState("ok");
-      } else {
+      if (!url) {
         setResolveState("miss");
+        return;
       }
-      return;
+      let cancelled = false;
+      const controller = new AbortController();
+      setResolveState("loading");
+      const p = new URLSearchParams({
+        providerId: currentProvider.id,
+        type,
+        id: String(id),
+      });
+      if (season) p.set("season", season);
+      if (episode) p.set("episode", episode);
+      fetch(`/api/providers/resolve?${p}`, { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("resolve"))))
+        .then((res) => {
+          if (cancelled) return;
+          if (res?.ok && res.url) {
+            setResolvedPage({ url: res.url, method: res.method });
+            setResolveState("ok");
+          } else {
+            setResolveState("miss");
+            if (!resolveFailHandledRef.current) {
+              resolveFailHandledRef.current = true;
+              iframeErrorRef.current?.();
+            }
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setResolveState("miss");
+        });
+      return () => {
+        cancelled = true;
+        controller.abort();
+      };
     }
     const title = data?.title || data?.name;
     if (!title) return; // TMDB metadata lands in a moment; then we resolve
@@ -936,9 +966,11 @@ const Watch = () => {
   }, [handleIframeError]);
 
   useEffect(() => {
-    if (!streamUrl || !iframeLoading || iframeError || playbackMode !== "embed")
-      return;
+    if (!streamUrl || iframeLoading === false || iframeError) return;
+    if (playbackMode !== "embed") return;
     // Resolution must settle first — a still-running title search isn't a hang.
+    // NOTE: iframeLoading starts true, so a provider that never resolves
+    // never reaches this effect through iframeLoading alone.
     if (resolveState === "loading" || resolveState === "idle") return;
     const timer = setTimeout(() => {
       if (document.visibilityState === "hidden") return;
@@ -946,6 +978,22 @@ const Watch = () => {
     }, 15_000);
     return () => clearTimeout(timer);
   }, [streamUrl, iframeLoading, iframeError, playbackMode, resolveState]);
+
+  // Unverified-or-idle dead-source guard. Covers the hole the watchdog above
+  // cannot: an embed that (a) never resolves ("idle"), or (b) resolved for an
+  // unverified provider whose embed silently shows nothing (no onLoad, no
+  // onError — a dead player with a toast). Deadline from streamUrl:
+  // verified-2embed mounts in ~1–2s; unverified embeds get a longer window.
+  // Direct playback is exempt — the custom player owns failure via onFail.
+  useEffect(() => {
+    if (!streamUrl || iframeError || playbackMode === "direct") return;
+    if (resolveState === "loading" || resolveState === "ok") return;
+    const timer = setTimeout(() => {
+      if (document.visibilityState === "hidden") return;
+      iframeErrorRef.current?.();
+    }, 20_000);
+    return () => clearTimeout(timer);
+  }, [streamUrl, iframeError, resolveState, playbackMode]);
 
   // ─── Up Next auto-advance ─────────────────────────────────────────────────
   // Netflix-style: clicking next shows an "Up next" card with a countdown

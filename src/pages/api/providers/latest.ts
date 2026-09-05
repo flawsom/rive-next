@@ -14,9 +14,18 @@ import { setPrivateApiHeaders } from "@/Utils/apiValidation";
 import { getBestDomain, getDomainPatterns } from "@/Utils/domainDiscovery";
 
 // Searchable providers whose homepage lists fresh uploads.
+// Candidate domains, in probe order. The real domains sit behind Cloudflare
+// that blocks datacenter IPs (Vercel egress gets connection resets / empty
+// JS-shells), so every known mirror is tried until one yields a real post
+// grid — a dead or empty response just moves to the next candidate.
 const CRAWLABLE: Record<string, string[]> = {
-  hdhub4u: ["hdhub4u"],
-  moviesdrive: ["moviesdrive"],
+  hdhub4u: [
+    "hdhub4u.fit",
+    "hdhub4u.zip",
+    "hdhub4u.in",
+    "hdhub4u.unblockit.pages.dev",
+  ],
+  moviesdrive: ["moviesdrive.pics", "moviesdrive.unblockit.pages.dev"],
 };
 
 export const maxDuration = 30;
@@ -194,15 +203,19 @@ export default async function handler(
     typeof req.query.provider === "string" ? req.query.provider : "hdhub4u";
   const providerId = CRAWLABLE[requested] ? requested : "hdhub4u";
 
-  // Candidate domains: the verified/active domain first, then known mirrors
-  // from the discovery patterns — some block datacenter IPs with 429s.
+  // Candidate domains: the verified/active domain first, then the known
+  // mirror chain (real domains block datacenter IPs — the chain matters).
   const primary = await getBestDomain(providerId);
   const candidates: string[] = [];
   if (primary) candidates.push(primary);
   for (const pattern of getDomainPatterns()[providerId] || []) {
     const url = /^https?:/i.test(pattern) ? pattern : `https://${pattern}`;
     if (!candidates.includes(url)) candidates.push(url);
-    if (candidates.length >= 4) break;
+  }
+  for (const mirror of CRAWLABLE[providerId] || []) {
+    const url = /^https?:/i.test(mirror) ? mirror : `https://${mirror}`;
+    if (!candidates.includes(url)) candidates.push(url);
+    if (candidates.length >= 6) break;
   }
 
   let lastReason = "no-active-domain";
@@ -244,11 +257,51 @@ export default async function handler(
     }
   }
 
-  // Soft-fail: the row shows its calm note when every domain is unreachable.
+  // Soft-fail: the row must never go missing. When every crawl candidate is
+  // unreachable (Cloudflare-class blocks from datacenter IPs), fall back to
+  // TMDB now-playing — regional when Vercel exposes the visitor's country,
+  // global otherwise — with the exact card shape the row renders.
+  const country =
+    typeof req.headers["x-vercel-ip-country"] === "string"
+      ? String(req.headers["x-vercel-ip-country"]).slice(0, 2).toUpperCase()
+      : "";
+  const fallback = await tmdbNowPlaying(country || undefined);
   return res.status(200).json({
     provider: providerId,
-    source: primary,
-    uploads: [],
+    source: fallback.length ? "tmdb" : primary,
+    uploads: fallback,
     reason: lastReason,
   });
+}
+
+/** TMDB now-playing fallback (regional when a country is known). */
+async function tmdbNowPlaying(country?: string): Promise<Upload[]> {
+  if (!TMDB_KEY) return [];
+  const region = country ? `&region=${country}` : "";
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8_000);
+    const res = await fetch(
+      `${TMDB_BASE}/movie/now_playing?language=en-US${region}&page=1&api_key=${TMDB_KEY}`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results || []).slice(0, 18).map((r: any) => ({
+      title: r.title || r.name || "",
+      quality: "",
+      href: "",
+      poster: r.poster_path ? `${IMG_BASE}${r.poster_path}` : null,
+      posterPath: r.poster_path || null,
+      tmdbId: r.id ?? null,
+      tmdbType: (r.first_air_date ? "tv" : "movie") as "tv" | "movie",
+      year:
+        Number((r.release_date || r.first_air_date || "").slice(0, 4)) || null,
+      overview: r.overview || null,
+      source: "tmdb",
+    }));
+  } catch {
+    return [];
+  }
 }

@@ -64,11 +64,15 @@ const LatestUploadsRow = () => {
 
   return (
     <div className={styles.latestRow}>
+      {" "}
       <h1>
         <BsRocketTakeoff className={styles.rowIcon} /> Latest Uploads
         <span className={styles.rowHint}>
-          fresh on {source === "moviesdrive" ? "MoviesDrive" : "HDHub4U"} —
-          hours old, not days
+          {source === "tmdb"
+            ? "trending in theaters right now"
+            : source === "moviesdrive"
+              ? "fresh on MoviesDrive — hours old, not days"
+              : "fresh on HDHub4U — hours old, not days"}
         </span>
       </h1>
       <div className={styles.rowList} data-hscroll>

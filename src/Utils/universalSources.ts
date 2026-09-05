@@ -12,7 +12,10 @@ export interface UniversalSource {
   url: string;
 }
 
-const UNIVERSAL_IDS = ["vidlink", "twoembed", "vidsrc"];
+// 2Embed first — the only universal whose availability is server-verifiable;
+// vidlink is the id-routed fallback, vidsrc stays last (unreachable from
+// serverless, so it fails fast through the standard verify pipeline).
+const UNIVERSAL_IDS = ["twoembed", "vidlink", "vidsrc"];
 
 export function getUniversalSources(
   type: "movie" | "tv",

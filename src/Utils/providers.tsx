@@ -1427,16 +1427,21 @@ export const CSX_PROVIDERS: Provider[] = [
 // high-quality alternates in the Sources menu and the auto-fallback walk.
 export const UNIVERSAL_PROVIDERS: Provider[] = [
   {
-    id: "vidlink",
-    name: "VidLink",
-    internalName: "VidLink",
-    description: "Instant universal player — every movie & show by TMDB id",
+    // 2Embed leads the universal tier because it is the only one whose embed
+    // availability can be verified server-side (<title> exposes a missing
+    // title as "()"), so the default player only mounts when the title is
+    // genuinely there. VidLink stays as the id-routed fallback — its catalog
+    // cannot be checked from the server, so it cannot be trusted blindly.
+    id: "twoembed",
+    name: "2Embed",
+    internalName: "TwoEmbed",
+    description: "Universal multi-server embeds (movies & series)",
     language: "en",
     categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
     isDefault: true,
     priority: 0,
-    embedBase: "https://vidlink.pro",
-    urlPattern: "tmdb-path",
+    embedBase: "https://www.2embed.cc",
+    urlPattern: "2embed",
     repoSource: "universal",
     capabilities: {
       hq: true,
@@ -1447,16 +1452,16 @@ export const UNIVERSAL_PROVIDERS: Provider[] = [
     },
   },
   {
-    id: "twoembed",
-    name: "2Embed",
-    internalName: "TwoEmbed",
-    description: "Universal multi-server embeds (movies & series)",
+    id: "vidlink",
+    name: "VidLink",
+    internalName: "VidLink",
+    description: "Instant universal player — every movie & show by TMDB id",
     language: "en",
     categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
     isDefault: false,
     priority: 1,
-    embedBase: "https://www.2embed.cc",
-    urlPattern: "2embed",
+    embedBase: "https://vidlink.pro",
+    urlPattern: "tmdb-path",
     repoSource: "universal",
     capabilities: {
       hq: true,
@@ -1622,16 +1627,17 @@ export function getDefaultProviders(): {
   tv: Provider;
   anime: Provider;
 } {
-  // Universals resolve instantly for every title — they are the defaults.
+  // 2Embed leads: it is server-verifiable, so the default never mounts a dead
+  // embed. VidLink covers titles 2Embed lacks (id-routed fallback).
   return {
     movie:
-      UNIVERSAL_PROVIDERS.find((p) => p.id === "vidlink") ||
+      UNIVERSAL_PROVIDERS.find((p) => p.id === "twoembed") ||
       CSX_PROVIDERS.find((p) => p.id === "moviesdrive")!,
     tv:
-      UNIVERSAL_PROVIDERS.find((p) => p.id === "vidlink") ||
+      UNIVERSAL_PROVIDERS.find((p) => p.id === "twoembed") ||
       CSX_PROVIDERS.find((p) => p.id === "moviesdrive")!,
     anime:
-      UNIVERSAL_PROVIDERS.find((p) => p.id === "vidlink") ||
+      UNIVERSAL_PROVIDERS.find((p) => p.id === "twoembed") ||
       PHISHER_PROVIDERS.find((p) => p.id === "anichi")!,
   };
 }
