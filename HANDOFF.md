@@ -310,6 +310,39 @@ bun run lint && npx prettier --write .
   "flawless and premium") — small interactions are treated as features.
 - Preserve their code; no heavy default scaffolding.
 
+### Session 6 (Sept 5, `2665f9b`) — direct playback actually plays now
+
+**Root cause of "embed is still there / nothing in our player":**
+`CustomPlayer` only initialized hls.js for URLs ending in `.m3u8`, but the
+videm direct tier serves extension-less HLS endpoints (`_stream?id=…`,
+`cap.php?…`). The player fell to the native `<video>` path, failed, and the
+fail pipeline bounced back to the ad-laden embed. **Fix:** treat only known
+native-video extensions as `<video>` sources; everything else goes through
+hls.js. Verified on production with the new build: extract → master via
+proxy (3 variants 640p/1280p/1920p) → variant playlist → 1.04 MB real
+MPEG-TS segment (`47` sync byte).
+
+Also this session:
+
+- **`NEXT_PUBLIC_STREAM_URL` hard dependency removed.** `getCachedDomain` /
+  resolve now fall back to verification-gated seed mirrors
+  (`hdhub4u.tv` → `.bi` → `.com`; user-confirmed base URLs) when the env
+  var is unset, so the "NEXT_PUBLIC_STREAM_URL is not set" panel can no
+  longer appear. Env var still honored when set (set in `.env.local` to
+  `https://hdhub4u.tv`; user must add it in Vercel env to bake it into
+  prod builds — but it's now optional).
+- Discovery pool reordered (`.tv`/`.bi` first) + **sitemap probe signal**: a
+  domain serving `/sitemap.xml` ranks above anonymous 200 shells.
+- "Not configured" panel replaced with a Switch Source action.
+- **hdhub4u reality check (verified live):** hdhub4u.tv/.bi root returns 200
+  from some Vercel regions but the movie/search pages are still
+  Cloudflare-challenged — `/api/providers/resolve` returns `ok:false` for
+  both, so the app correctly auto-switches to the universal tier. When CF
+  stops challenging (or a mirror without CF appears), the seeds + 15-min
+  discovery will pick it up automatically. Server-side scraping of a
+  CF-challenged site is impossible without a browser runtime; the user
+  insists these domains work (true from their browser, false from Vercel).
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
