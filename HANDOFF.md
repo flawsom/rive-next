@@ -1,11 +1,42 @@
 # Open Stream — Agent Handoff (Sept 5, 2026)
 
-Everything below was verified against the working tree at commit `b92f118`
-(head of `dev`, clean, fully pushed to `origin/dev`).
+> Everything below was verified against live production deploys of `dev`
+> (HEAD `bbe46d9` + the Session-3 tweak at the tip), all pushed to
+> `origin/dev`. Vercel auto-deploys the branch.
 
 ---
 
-## ⚡ Session 2 update — Sept 5 2026 (tree now DIRTY; changes not yet pushed)
+## ⚡ Session 3 update — Sept 5 2026 (post-bbe46d9 re-verification)
+
+Re-ran the §3 verification suite against the live URL after the Session-2
+fixes deployed (manifest links confirmed in the live `<head>`). Evidence,
+captured ~14:00–14:45 UTC:
+
+- **Universal tier re-verified 8/8 × 2/2:** `resolve` → `ok:true` for every
+  title on both `twoembed` and `vidlink` (Inception 27205, Interstellar
+  157336, The Dark Knight 155, Deadpool & Wolverine 533535, Dune Part Two
+  693134, Oppenheimer 872585, RRR 579974, Animal 1064213).
+- **Embed pages carry real per-title players** (fetched directly, not just
+  resolver verdicts): 2Embed serves `<title>Inception (2010)</title>` player
+  pages (~9 KB); VidLink SSRs the actual TMDB poster for the id (~90–110 KB)
+  — both are genuine title pages, not shells.
+- **Latency profile (why the default tier now feels instant):** page HTML
+  ~0.2 s TTFB; `sources?action=best` ~80 ms (CDN-cached verdict); `resolve`
+  ~0.15 s (Vercel→2Embed). The one real stall was client-side: 2Embed's TLS
+  handshake measures ~1.4 s from a browser and only started when the iframe
+  mounted. Fix: global `preconnect` + `dns-prefetch` for `www.2embed.cc`
+  and `vidlink.pro` in `_document.tsx` — the socket warms on any page, so
+  TLS leaves the embed-mount critical path.
+- hdhub4u/moviesdrive catalog domains remain parked (unchanged from
+  Session 2); the resolver fast-misses them into the universal tier.
+
+Still open (unchanged): a real browser must confirm pixels/time advance on
+`/watch?type=movie&id=…` for the acceptance set — curl proves mounts, not
+video frames.
+
+---
+
+## ⚡ Session 2 update — Sept 5 2026 (shipped in `bbe46d9`, pushed)
 
 Ran the §3 verification suite against the live URL (Vercel egress, not
 localhost). Everything below is production evidence, captured 13:00–14:00 UTC.
@@ -59,8 +90,8 @@ localhost). Everything below is production evidence, captured 13:00–14:00 UTC.
   weekly). Watch the discovery pool; when a genuine mirror comes back the
   resolver pipeline will use it. Consider updating `PROVIDER_DOMAINS` +
   `NEXT_PUBLIC_STREAM_URL` (Vercel env) once a verified catalog domain is up.
-- Changes above are unstaged/unpushed on `dev` — the user pushes when ready;
-  Vercel auto-deploys the branch.
+- The Session-2 fixes above shipped in `bbe46d9` (pushed to `origin/dev`;
+  Vercel auto-deployed the branch) — re-verified in Session 3.
 
 ---
 
