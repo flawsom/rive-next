@@ -195,6 +195,21 @@ function stripTags(s: string): string {
     .trim();
 }
 
+/**
+ * Soft-existence check: when a title is known, the fetched page must actually
+ * mention it. WordPress shells (e.g. hdhub4u.fit) answer 200 with an identical
+ * JS homepage for ANY id route, and some mirrors redirect to unrelated sites —
+ * both "verify" a page that will never play. Token coverage handles inflected
+ * or decorated titles ("Panchayat Season 1", "Toxic: A Fairy Tale…").
+ */
+function pageMentionsTitle(html: string, title: string): boolean {
+  const tokens = normalizeTitle(title);
+  if (tokens.length === 0) return true; // no title → existence check only
+  const text = stripTags(html).toLowerCase();
+  const hits = tokens.filter((t) => text.includes(t)).length;
+  return hits / tokens.length >= 0.6;
+}
+
 interface Candidate {
   url: string;
   score: number;
@@ -538,7 +553,14 @@ export default async function handler(
   // 1) Does the naive id-based URL actually exist?
   if (naiveUrl) {
     const direct = await fetchText(naiveUrl, 7_000);
-    if (direct && direct.status === 200 && !looksLikeNotFound(direct.html)) {
+    if (
+      direct &&
+      direct.status === 200 &&
+      !looksLikeNotFound(direct.html) &&
+      // WordPress shells answer 200 for ANY id route with an identical
+      // homepage — require the page to actually carry the title when known.
+      pageMentionsTitle(direct.html, title)
+    ) {
       const entry: CacheEntry = {
         at: Date.now(),
         url: naiveUrl,
@@ -577,7 +599,12 @@ export default async function handler(
       // Verify the top candidates until one is a real page.
       for (const candidate of candidates) {
         const page = await fetchText(candidate.url, 7_000);
-        if (page && page.status === 200 && !looksLikeNotFound(page.html)) {
+        if (
+          page &&
+          page.status === 200 &&
+          !looksLikeNotFound(page.html) &&
+          pageMentionsTitle(page.html, title)
+        ) {
           const entry: CacheEntry = {
             at: Date.now(),
             url: candidate.url,
@@ -603,7 +630,12 @@ export default async function handler(
     const indexed = await searchIndexCandidates(domain, title);
     for (const candidate of indexed) {
       const page = await fetchText(candidate, 7_000);
-      if (page && page.status === 200 && !looksLikeNotFound(page.html)) {
+      if (
+        page &&
+        page.status === 200 &&
+        !looksLikeNotFound(page.html) &&
+        pageMentionsTitle(page.html, title)
+      ) {
         const entry: CacheEntry = {
           at: Date.now(),
           url: candidate,
