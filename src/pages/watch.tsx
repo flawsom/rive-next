@@ -385,11 +385,17 @@ const Watch = () => {
     "idle" | "loading" | "ok" | "miss"
   >("idle");
   const resolveFailHandledRef = useRef(false);
+  // When a UNIVERSAL provider's resolve misses, don't auto-switch right away:
+  // the parallel direct-stream extraction (which gates the embed) may still
+  // find the title — a false resolver miss must never cancel a stream that's
+  // about to play. The switch fires only if extraction also comes up empty.
+  const deferSwitchOnExtractRef = useRef(false);
 
   useEffect(() => {
     setResolvedPage(null);
     setResolveState("idle");
     resolveFailHandledRef.current = false;
+    deferSwitchOnExtractRef.current = false;
   }, [currentProvider, id, season, episode, domainVersion]);
 
   useEffect(() => {
@@ -429,7 +435,14 @@ const Watch = () => {
             setResolveState("ok");
           } else {
             setResolveState("miss");
-            if (!resolveFailHandledRef.current) {
+            if (currentProvider.urlPattern) {
+              // Universal: a direct-stream extraction is already running in
+              // parallel and gating the embed — let it finish before the
+              // auto-switch, so a false resolver miss can't cancel a stream
+              // that's about to play. Extraction triggers the switch if it
+              // also comes up empty.
+              deferSwitchOnExtractRef.current = true;
+            } else if (!resolveFailHandledRef.current) {
               resolveFailHandledRef.current = true;
               iframeErrorRef.current?.();
             }
@@ -594,6 +607,7 @@ const Watch = () => {
     if (season) params.set("season", season);
     if (episode) params.set("episode", episode);
     if (resolvedPage?.url) params.set("pageUrl", resolvedPage.url);
+    let applied = false; // a direct stream took over (no switch needed)
     const run = async () => {
       try {
         const res = await fetch(`/api/providers/extract?${params}`, {
@@ -612,6 +626,7 @@ const Watch = () => {
             const ct = head.headers.get("content-type") || "";
             if (head.ok && /video\/|mpegurl|audio\//.test(ct)) {
               if (cancelled) return;
+              applied = true;
               setStreamOverride(candidate.url);
               setIframeError(false);
               setIframeLoading(false);
@@ -630,8 +645,21 @@ const Watch = () => {
         // extraction unavailable — the embed path continues undisturbed
       } finally {
         // Direct attempt finished (found, empty, or errored) — the embed
-        // fallback may now mount if no direct stream took over.
-        if (!cancelled && isUniversal) setDirectChecked(true);
+        // fallback may now mount if no direct stream took over. If the
+        // resolver missed this universal while extraction was running, the
+        // switch waits for this verdict: a stream that played means no
+        // switch; an empty extraction means the title really is absent.
+        if (!cancelled && isUniversal) {
+          setDirectChecked(true);
+          if (
+            !applied &&
+            deferSwitchOnExtractRef.current &&
+            !resolveFailHandledRef.current
+          ) {
+            resolveFailHandledRef.current = true;
+            iframeErrorRef.current?.();
+          }
+        }
       }
     };
     // Universals run the extraction immediately (it gates the embed); other
@@ -640,7 +668,18 @@ const Watch = () => {
     // Safety net: if extraction hangs, let the embed fallback through.
     const fallbackTimer = isUniversal
       ? setTimeout(() => {
-          if (!cancelled) setDirectChecked(true);
+          if (cancelled) return;
+          setDirectChecked(true);
+          // Extraction hung — if the resolver missed this universal, switch
+          // now rather than leaving the user on an empty player.
+          if (
+            !applied &&
+            deferSwitchOnExtractRef.current &&
+            !resolveFailHandledRef.current
+          ) {
+            resolveFailHandledRef.current = true;
+            iframeErrorRef.current?.();
+          }
         }, 8000)
       : null;
     return () => {

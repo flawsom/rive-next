@@ -388,16 +388,35 @@ async function verifyUniversalEmbed(
   if (!TWOEMBED_EMBED_URL_RE.test(url)) {
     return { at: Date.now(), url: null, method: "direct", searchUrl: null };
   }
-  const outer = twoembedOuterUrl(url);
-  if (!outer) {
+  // Movie embeds live at /embed/{tmdbId} and that page is the real oracle:
+  // real titles carry the movie name ("Toxic: A Fairy Tale for Grown-ups
+  // (2026)"), missing titles render a generic "2Embed.cc - Player" shell.
+  // The outer /movie/{id} page is NOT a reliable oracle — it renders an
+  // empty title " () - 2Embed" for some titles that 2Embed genuinely has
+  // (observed live: 1213243), which falsely rejected playable titles.
+  // TV embeds (/embedtv/…) render a constant placeholder title for every id,
+  // so TV keeps verifying the outer /tv/{id} page, where missing titles read
+  // "Unknown TV Show".
+  const isTvRoute = /\/embedtv\//i.test(url);
+  const checkUrl = isTvRoute ? twoembedOuterUrl(url) : url;
+  if (!checkUrl) {
     return { at: Date.now(), url: null, method: "direct", searchUrl: null };
   }
   try {
-    const res = await fetchText(outer, 7_000);
+    const res = await fetchText(checkUrl, 7_000);
+    if (!res) {
+      // Transient network failure — never cache a miss from that. Fail open
+      // so an embed that might play is still attempted by the player.
+      return { at: Date.now(), url, method: "direct", searchUrl: null };
+    }
     const raw = res?.html.match(/<title>([^<]*)<\/title>/i)?.[1] || "";
     // Strip the " - 2Embed" / " - TvShow - 2Embed" suffixes, then decide.
-    const titleText = raw.replace(/-\s*2Embed.*$/i, "").trim();
+    const titleText = raw.replace(/-\s*(?:TvShow\s*)?2Embed.*$/i, "").trim();
     const isUnknownShow = /^unknown tv show/i.test(titleText);
+    const looksGeneric =
+      /^2embed/i.test(titleText) ||
+      titleText === "" ||
+      /^\(\s*\)/.test(titleText);
     const hasName = /\w/.test(titleText.replace(/[()]/g, " "));
     const ok =
       !!res &&
@@ -405,13 +424,15 @@ async function verifyUniversalEmbed(
       !!res.html &&
       !looksLikeNotFound(res.html) &&
       !isUnknownShow &&
+      !looksGeneric &&
       hasName;
     if (ok) {
       // The inner embed URL is what the watch page mounts.
       return { at: Date.now(), url, method: "direct", searchUrl: null };
     }
   } catch {
-    // network failure — treat as unverifiable miss
+    // Transient network failure — fail open (never cache a miss from it).
+    return { at: Date.now(), url, method: "direct", searchUrl: null };
   }
   return { at: Date.now(), url: null, method: "direct", searchUrl: null };
 }
