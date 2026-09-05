@@ -44,15 +44,23 @@ embeds a signed token (`var Q = {…}`) + server refs, and
 title, real `video/mp2t` segments at 200/206): Inception, Interstellar,
 The Dark Knight, The Matrix, Fight Club, Pulp Fiction, Shawshank, Forrest
 Gump, Godfather, Dune 2, Deadpool & Wolverine, Oppenheimer, RRR, Animal,
-Titanic, Harry Potter 1.
-
-### NEXT_PUBLIC_STREAM_URL answer
-
+Titanic, Harry Potter 1.### NEXT_PUBLIC_STREAM_URL answer
 It is ONLY a static seed for the hdhub4u fallback — the app already
 auto-fetches/auto-updates working domains every 15 min (`domainDiscovery.tsx`
 probes CloudStream repos + mirrors and promotes the best live domain into the
 live map, browser-side + via `/api/providers/domains`). The new videm tier
 makes playback fully independent of that env var. No env change needed.
+
+### One more production bug found & fixed in Session 4 (`832179f`)
+
+The `/api/proxy/media/<encoded-url>` PATH form never reached the API route on
+Vercel — encoded slashes are decoded before route matching, so every HLS
+request from the custom player got the app's 404 page (this also explains
+why direct HLS could never have played before). Fixed: the player now uses
+the query form everywhere; the proxy's HLS child-URI rewrite makes relative
+resolution a non-issue. Verified live on the new build: extract → cap.php
+master via proxy (absolute rewritten variants) → variant via proxy → segment
+via proxy = `200 video/mp2t` (400 KB). Typecheck ✅, tree clean, pushed.
 
 ---
 
