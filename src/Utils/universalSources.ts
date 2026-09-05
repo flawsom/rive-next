@@ -13,9 +13,10 @@ export interface UniversalSource {
 }
 
 // 2Embed first — the only universal whose availability is server-verifiable;
-// vidlink is the id-routed fallback, vidsrc stays last (unreachable from
-// serverless, so it fails fast through the standard verify pipeline).
-const UNIVERSAL_IDS = ["twoembed", "vidlink", "vidsrc"];
+// videm is the direct-HLS tier behind 2Embed's default server, vidlink the
+// id-routed fallback, vidsrc stays last (unreachable from serverless, so it
+// fails fast through the standard verify pipeline).
+const UNIVERSAL_IDS = ["twoembed", "videm", "vidlink", "vidsrc"];
 
 export function getUniversalSources(
   type: "movie" | "tv",

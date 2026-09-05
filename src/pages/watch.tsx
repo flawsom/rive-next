@@ -602,10 +602,7 @@ const Watch = () => {
               { method: "HEAD", cache: "no-store" },
             );
             const ct = head.headers.get("content-type") || "";
-            if (
-              head.ok &&
-              /video\/|application\/vnd\.apple\.mpegurl|audio\//.test(ct)
-            ) {
+            if (head.ok && /video\/|mpegurl|audio\//.test(ct)) {
               if (cancelled) return;
               setStreamOverride(candidate.url);
               setIframeError(false);
@@ -625,7 +622,7 @@ const Watch = () => {
         // extraction unavailable — the embed path continues undisturbed
       }
     };
-    const timer = setTimeout(run, 2500); // let the embed get a head start
+    const timer = setTimeout(run, 400); // direct streams take over almost instantly
     return () => {
       cancelled = true;
       controller.abort();

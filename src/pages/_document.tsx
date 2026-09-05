@@ -11,6 +11,22 @@ export default function Document() {
             watch-page iframe then starts loading on frame one. */}
         <link rel="preconnect" href="https://www.2embed.cc" />
         <link rel="dns-prefetch" href="https://www.2embed.cc" />
+        {/* videm.xyz is the direct-HLS backend (2Embed's default server): its
+            embed-page handshake + token mint feed the custom player, and its
+            pchrelay CDN serves the HLS segments — warm both so the first
+            direct stream starts on frame one. */}
+        <link
+          rel="preconnect"
+          href="https://videm.xyz"
+          crossOrigin="anonymous"
+        />
+        <link rel="dns-prefetch" href="https://videm.xyz" />
+        <link
+          rel="preconnect"
+          href="https://pchrelay.videm.xyz"
+          crossOrigin="anonymous"
+        />
+        <link rel="dns-prefetch" href="https://pchrelay.videm.xyz" />
         <link rel="preconnect" href="https://vidlink.pro" />
         <link rel="dns-prefetch" href="https://vidlink.pro" />
         {/* Installable shell: the offline service worker (next-pwa) is

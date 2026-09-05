@@ -1,8 +1,58 @@
 # Open Stream — Agent Handoff (Sept 5, 2026)
 
 > Everything below was verified against live production deploys of `dev`
-> (HEAD `bbe46d9` + the Session-3 tweak at the tip), all pushed to
-> `origin/dev`. Vercel auto-deploys the branch.
+> (HEAD `bbe46d9` + the Session-3 tweak at the tip, then Session 4's
+> direct-stream tier), all pushed to `origin/dev`. Vercel auto-deploys.
+
+---
+
+## ⚡ Session 4 — REAL direct-stream playback (the "no streams" fix)
+
+**The root cause of "no streams / nothing plays":** the universal tier only
+mounted iframes (2Embed's page is click-gated + ad-layered), and
+`/api/providers/extract` found `count: 0` on every JS-driven player page.
+
+**The fix — a real direct-HLS tier built on the player 2Embed itself uses:**
+`videm.xyz` is the HLS backend of 2Embed's default server. Its embed page
+embeds a signed token (`var Q = {…}`) + server refs, and
+`/api.php?a=play&ref=…&t=…` mints REAL multi-quality HLS manifests
+(`/_stream?id=…` or `cap.php` gateways, both CORS-open). New code:
+
+- `src/Utils/videmSources.ts` — `fetchVidemDirect()`: embed page → token/refs
+  → mint up to 3 playable stream URLs (hls/mp4). Plain fetch + AbortController
+  timeouts, serverless-safe.
+- `src/Utils/providers.tsx` — new `videm` universal provider (`urlPattern:
+"videm"`, approved, priority 1 after 2Embed).
+- `src/pages/api/providers/extract.ts` — universal tier (twoembed/vidlink/
+  vidsrc/videm) now returns videm direct streams FIRST instead of scraping
+  JS players for nothing.
+- `src/pages/api/proxy/media.ts` — HLS manifests are rewritten so every
+  child URI (including root-relative `/_stream?id=…`) becomes an absolute
+  upstream URL; upstream fetches now carry a same-origin referer (videm's
+  `cap.php` gateway rejects referer-less requests).
+- `src/pages/watch.tsx` — extract boost fires at 400ms (was 2.5s) and the
+  HEAD content-type sniff now accepts `application/x-mpegurl` (videm's
+  content-type; the old regex only matched `vnd.apple.mpegurl` and would
+  have rejected every direct stream).
+- `_document.tsx` — preconnect `videm.xyz` + `pchrelay.videm.xyz`.
+
+### Mass-verification evidence (local, same code path as production)
+
+`bun scripts/probe-videm.ts` walks master → variant → real segment:
+
+**16/16 movies + Breaking Bad S1E1 all playable** (1–3 quality variants per
+title, real `video/mp2t` segments at 200/206): Inception, Interstellar,
+The Dark Knight, The Matrix, Fight Club, Pulp Fiction, Shawshank, Forrest
+Gump, Godfather, Dune 2, Deadpool & Wolverine, Oppenheimer, RRR, Animal,
+Titanic, Harry Potter 1.
+
+### NEXT_PUBLIC_STREAM_URL answer
+
+It is ONLY a static seed for the hdhub4u fallback — the app already
+auto-fetches/auto-updates working domains every 15 min (`domainDiscovery.tsx`
+probes CloudStream repos + mirrors and promotes the best live domain into the
+live map, browser-side + via `/api/providers/domains`). The new videm tier
+makes playback fully independent of that env var. No env change needed.
 
 ---
 

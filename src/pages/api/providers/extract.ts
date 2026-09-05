@@ -18,6 +18,7 @@ import { setPrivateApiHeaders } from "@/Utils/apiValidation";
 import { findProviderById } from "@/Utils/providers";
 import { getOrBuildManifest } from "@/Utils/providerManifest";
 import { getCachedDomain } from "@/Utils/domainDiscovery";
+import { fetchVidemDirect, VIDEM_DIRECT_PROVIDERS } from "@/Utils/videmSources";
 
 export const maxDuration = 55;
 
@@ -211,6 +212,15 @@ export default async function handler(
 
   const deadline = Date.now() + 45_000;
   const candidates: StreamCandidate[] = [];
+
+  // 0) Universal tier: mint REAL direct HLS streams from the videm player
+  // API (the HLS backend of 2Embed's default server). This is what makes
+  // the custom player work — the generic HTML scraping below finds nothing
+  // on these JS-driven players.
+  if (VIDEM_DIRECT_PROVIDERS.has(providerId)) {
+    const videm = await fetchVidemDirect(type, id, season, episode);
+    candidates.push(...videm.streams);
+  }
 
   // 1) The resolved provider page itself.
   const html = await fetchPage(primaryUrl, 12_000);

@@ -28,7 +28,7 @@ export interface Provider {
    * any title directly from its TMDB id (no site search, no Cloudflare-blocked
    * scraping) and always resolve instantly — the universal playback tier.
    */
-  urlPattern?: "tmdb-path" | "vidsrc" | "2embed";
+  urlPattern?: "tmdb-path" | "vidsrc" | "2embed" | "videm";
   iconUrl?: string;
   repoSource: "phisher" | "csx" | "universal";
   capabilities: {
@@ -1452,6 +1452,32 @@ export const UNIVERSAL_PROVIDERS: Provider[] = [
     },
   },
   {
+    // VidEm is the HLS player behind 2Embed's default server. Its embed page
+    // carries a signed token + server list, and /api.php?a=play mints REAL
+    // multi-quality HLS manifests (CORS-open) — the direct-stream source that
+    // makes the custom player work. It is never the default embed (2Embed's
+    // click-gated page stays authoritative), but its streams are extracted
+    // for every universal provider by /api/providers/extract.
+    id: "videm",
+    name: "VidEm",
+    internalName: "VidEm",
+    description: "Direct HLS player — multi-quality streams by TMDB id",
+    language: "en",
+    categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
+    isDefault: false,
+    priority: 1,
+    embedBase: "https://videm.xyz",
+    urlPattern: "videm",
+    repoSource: "universal",
+    capabilities: {
+      hq: true,
+      multiLang: true,
+      subtitle: true,
+      dub: false,
+      dubbedHindi: false,
+    },
+  },
+  {
     id: "vidlink",
     name: "VidLink",
     internalName: "VidLink",
@@ -1459,7 +1485,7 @@ export const UNIVERSAL_PROVIDERS: Provider[] = [
     language: "en",
     categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
     isDefault: false,
-    priority: 1,
+    priority: 2,
     embedBase: "https://vidlink.pro",
     urlPattern: "tmdb-path",
     repoSource: "universal",
@@ -1479,7 +1505,7 @@ export const UNIVERSAL_PROVIDERS: Provider[] = [
     language: "en",
     categories: ["movie", "tv", "anime", "cartoon", "asianDrama"],
     isDefault: false,
-    priority: 2,
+    priority: 3,
     // NOTE: verified unreachable from serverless (connection reset) at
     // shipping time; kept disabled rather than advertised as playable.
     // urlPattern intentionally omitted so it never wins selection.
@@ -1504,6 +1530,7 @@ export const APPROVED_PROVIDER_IDS = new Set<string>([
   // Universal id-routed (always-on playback tier)
   "vidlink",
   "twoembed",
+  "videm",
   "vidsrc",
   // Movies & TV (Phisher)
   "hdhub4u",
@@ -1566,6 +1593,11 @@ export function buildEmbedUrl(
     return type === "movie"
       ? `${base}/embed/${id}`
       : `${base}/embedtv/${id}?s=${s}&e=${e}`;
+  }
+  if (provider.urlPattern === "videm") {
+    return type === "movie"
+      ? `${base}/embed/movie/${id}`
+      : `${base}/embed/tv/${id}/${s}/${e}`;
   }
   return type === "movie"
     ? `${base}/movie/${id}`

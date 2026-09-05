@@ -362,8 +362,8 @@ async function verifyUniversalEmbed(
   provider: Provider,
   url: string,
 ): Promise<CacheEntry> {
-  if (provider.urlPattern === "tmdb-path") {
-    // VidLink-style routes: status codes are a real availability oracle.
+  if (provider.urlPattern === "tmdb-path" || provider.urlPattern === "videm") {
+    // VidLink/VidEm-style routes: status codes are a real availability oracle.
     // The embed plays exactly when the route answers 200; missing titles and
     // broken TV routes answer 404/500 (observed live). A transient failure
     // (network error) must NOT be cached as a miss — fail open instead, so
