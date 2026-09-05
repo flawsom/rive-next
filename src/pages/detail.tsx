@@ -42,15 +42,6 @@ const DetailPage = () => {
   const [notFound, setNotFound] = useState(false);
   const [user, setUser] = useState<any>();
 
-  // A link with a missing/invalid type or id (e.g. /detail?type=undefined&id=undefined)
-  // must never spin forever — resolve it to a friendly not-found state instead.
-  const paramsValid =
-    (type === "movie" || type === "tv") &&
-    !!id &&
-    id !== "undefined" &&
-    id !== "null" &&
-    /^\d+$/.test(id as string);
-
   // Close the trailer modal on Escape; cleanup the key listener.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -66,41 +57,74 @@ const DetailPage = () => {
     };
   }, [trailerOpen]);
 
+  const [fetchError, setFetchError] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     setNotFound(false);
+    setFetchError(false);
     const rawType = params.get("type");
     const rawId = params.get("id");
     setType(rawType);
     setId(rawId);
     setSeason(params.get("season"));
     setEpisode(params.get("episode"));
+
+    // During prerendered hydration the router shim can briefly report no
+    // params at all. That is NOT a broken link — wait for the params to
+    // populate before deciding anything, then fall through.
     const typeOk = rawType === "movie" || rawType === "tv";
     const idOk = !!rawId && /^\d+$/.test(rawId);
+    if (!rawType && !rawId) {
+      let attempts = 0;
+      const poll = setInterval(() => {
+        attempts++;
+        if (params.get("type") && params.get("id")) {
+          clearInterval(poll);
+          setType(params.get("type"));
+          setId(params.get("id"));
+        } else if (attempts >= 10) {
+          clearInterval(poll);
+          setData({});
+          setImages([]);
+          setLoading(false);
+          setNotFound(true);
+        }
+      }, 150);
+      return () => clearInterval(poll);
+    }
     if (!typeOk || !idOk) {
-      // Bad link (e.g. type=undefined): show the not-found state immediately
-      // instead of endless skeletons. Valid-looking ids always get a real fetch.
-      // Bad link: show the not-found state immediately instead of endless skeletons.
+      // Genuinely malformed link (e.g. type=undefined): friendly not-found
+      // instead of endless skeletons.
       setData({});
       setImages([]);
       setLoading(false);
       setNotFound(true);
       return;
     }
+
     const fetchData = async () => {
-      // Only the primary metadata fetch decides whether a title exists.
-      // A transient failure of videos/images (TMDB rate-limit, 8s timeout,
-      // hiccup) must never declare a perfectly valid title "unavailable" —
-      // those sections degrade gracefully instead.
-      try {
-        // Retry once: TMDB rate-limits the shared key occasionally; a single
-        // retry absorbs that without the user ever seeing a false dead title.
-        let data: any = await axiosFetch({ requestID: `${type}Data`, id: id });
-        if (!data) {
-          await new Promise((r) => setTimeout(r, 800));
-          data = await axiosFetch({ requestID: `${type}Data`, id: id });
-        }
-        if (!data || data.success === false) {
+      // IMPORTANT: use rawType/rawId (from the URL), never the state vars —
+      // state updates land on the NEXT render, so the state-based version
+      // requested requestID "Data" with id "" on the first pass, crashed on
+      // the undefined URL, and falsely declared the title unavailable.
+      //
+      // Only a definitive TMDB 404 (success:false) marks a title as not
+      // existing. Any transient failure (rate-limit, timeout, network) retries
+      // with backoff and then shows an honest retry state instead.
+      let data: any = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        data = await axiosFetch({
+          requestID: `${rawType}Data`,
+          id: rawId,
+          language: "en-US",
+        });
+        if (data && data.success !== false) break;
+        if (data && data.success === false) break; // definitive 404 from TMDB
+        await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+      }
+      if (!data || data.success === false) {
+        if (data && data.success === false) {
           // Real 404: TMDB has no such id (or it was deleted).
           setData({});
           setImages([]);
@@ -108,19 +132,20 @@ const DetailPage = () => {
           setNotFound(true);
           return;
         }
-        setData(data);
+        // Transient failure after retries — recoverable, never "unavailable".
+        setFetchError(true);
         setLoading(false);
-      } catch (error) {
-        // Failed lookup (bad id, deleted title) → not-found, never an eternal skeleton.
-        setData({});
-        setImages([]);
-        setLoading(false);
-        setNotFound(true);
         return;
       }
+      setData(data);
+      setLoading(false);
+
       // ── Enrichment: independent, failure-tolerant ──
       try {
-        const Videos = await axiosFetch({ requestID: `${type}Videos`, id: id });
+        const Videos = await axiosFetch({
+          requestID: `${rawType}Videos`,
+          id: rawId,
+        });
         setTrailer(
           Videos?.results?.find(
             (ele: any) => ele.type === "Trailer" && ele.official === true,
@@ -131,8 +156,8 @@ const DetailPage = () => {
       }
       try {
         const response = await axiosFetch({
-          requestID: `${type}Images`,
-          id: id,
+          requestID: `${rawType}Images`,
+          id: rawId,
         });
         const arr: string[] = [];
         (response?.backdrops || []).slice(0, 20).forEach((ele: any) => {
@@ -151,7 +176,8 @@ const DetailPage = () => {
       }
     };
     fetchData();
-  }, [params, id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
 
   useEffect(() => {
     if (!auth) {
@@ -197,7 +223,7 @@ const DetailPage = () => {
     navigatorShare({ text: data.title, url: url });
   };
 
-  if (notFound && !loading) {
+  if ((notFound || fetchError) && !loading) {
     return (
       <div className={styles.DetailPage}>
         <div
@@ -213,18 +239,38 @@ const DetailPage = () => {
           }}
         >
           <h1 style={{ fontSize: "1.8rem", margin: 0 }}>
-            This title isn&#39;t available
+            {fetchError
+              ? "Couldn&#39;t load this title"
+              : "This title isn&#39;t available"}
           </h1>
           <p style={{ opacity: 0.7, maxWidth: 420 }}>
-            The link you followed is broken or the title no longer exists.
+            {fetchError
+              ? "We had trouble reaching the catalog. This is usually temporary."
+              : "The link you followed is broken or the title no longer exists."}
           </p>
-          <div style={{ display: "flex", gap: "0.75rem" }}>
+          <div
+            style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}
+          >
             <Link className={styles.links} href="/">
               Go Home
             </Link>
             <Link className={styles.links} href="/search">
               Search Titles
             </Link>
+            {fetchError && (
+              <button
+                type="button"
+                className={styles.links}
+                onClick={() => {
+                  // Drop the failed cache entry so the retry gets a fresh run.
+                  setFetchError(false);
+                  setLoading(true);
+                  window.location.reload();
+                }}
+              >
+                Retry
+              </button>
+            )}
           </div>
         </div>
       </div>
