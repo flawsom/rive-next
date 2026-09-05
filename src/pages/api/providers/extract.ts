@@ -222,51 +222,59 @@ export default async function handler(
     candidates.push(...videm.streams);
   }
 
-  // 1) The resolved provider page itself.
-  const html = await fetchPage(primaryUrl, 12_000);
-  if (html) candidates.push(...extractFromHtml(html));
+  // Legacy HTML/API scraping ONLY when the direct tier found nothing. For
+  // universal providers the videm result is authoritative — running the
+  // remaining steps anyway added ~10s of serial fetches before the response
+  // landed (the watch page's extraction gate + embed release both wait on
+  // it), for zero extra coverage: the JS-driven universal players expose
+  // nothing to regex scraping (the original count:0 bug).
+  if (candidates.length === 0) {
+    // 1) The resolved provider page itself.
+    const html = await fetchPage(primaryUrl, 12_000);
+    if (html) candidates.push(...extractFromHtml(html));
 
-  // 2) iframe sources inside the page → fetch those too (common pattern).
-  const iframeSrcs = new Set<string>();
-  if (html) {
-    const iframeMatches =
-      html.match(/<iframe[^>]+src=["']([^"']+)["']/gi) || [];
-    for (const tag of iframeMatches) {
-      const srcMatch = tag.match(/src=["']([^"']+)["']/i);
-      if (!srcMatch) continue;
-      try {
-        const resolved = new URL(srcMatch[1], primaryUrl).toString();
-        if (
-          /^https?:/i.test(resolved) &&
-          isPublicHostname(new URL(resolved).hostname)
-        ) {
-          iframeSrcs.add(resolved);
+    // 2) iframe sources inside the page → fetch those too (common pattern).
+    const iframeSrcs = new Set<string>();
+    if (html) {
+      const iframeMatches =
+        html.match(/<iframe[^>]+src=["']([^"']+)["']/gi) || [];
+      for (const tag of iframeMatches) {
+        const srcMatch = tag.match(/src=["']([^"']+)["']/i);
+        if (!srcMatch) continue;
+        try {
+          const resolved = new URL(srcMatch[1], primaryUrl).toString();
+          if (
+            /^https?:/i.test(resolved) &&
+            isPublicHostname(new URL(resolved).hostname)
+          ) {
+            iframeSrcs.add(resolved);
+          }
+        } catch {
+          // skip malformed iframe src
         }
-      } catch {
-        // skip malformed iframe src
+        if (iframeSrcs.size >= 3) break;
       }
-      if (iframeSrcs.size >= 3) break;
     }
-  }
-  await Promise.all(
-    Array.from(iframeSrcs)
-      .slice(0, 3)
-      .map(async (iframeUrl) => {
-        if (Date.now() > deadline) return;
-        const inner = await fetchPage(iframeUrl, 10_000);
-        if (inner) candidates.push(...extractFromHtml(inner));
-      }),
-  );
-
-  // 3) Manifest-derived API endpoints.
-  if (Date.now() < deadline) {
-    candidates.push(
-      ...(await extractFromApis(
-        providerId,
-        primaryUrl,
-        Math.max(0, deadline - Date.now()),
-      )),
+    await Promise.all(
+      Array.from(iframeSrcs)
+        .slice(0, 3)
+        .map(async (iframeUrl) => {
+          if (Date.now() > deadline) return;
+          const inner = await fetchPage(iframeUrl, 10_000);
+          if (inner) candidates.push(...extractFromHtml(inner));
+        }),
     );
+
+    // 3) Manifest-derived API endpoints.
+    if (Date.now() < deadline) {
+      candidates.push(
+        ...(await extractFromApis(
+          providerId,
+          primaryUrl,
+          Math.max(0, deadline - Date.now()),
+        )),
+      );
+    }
   }
 
   // Dedupe by URL, prefer HLS (best player support).

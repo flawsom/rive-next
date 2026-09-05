@@ -665,7 +665,10 @@ const Watch = () => {
     // Universals run the extraction immediately (it gates the embed); other
     // providers keep the boost but never block the embed mount.
     const timer = setTimeout(run, isUniversal ? 0 : 400);
-    // Safety net: if extraction hangs, let the embed fallback through.
+    // Hang guard: extraction normally returns in seconds (cold starts can
+    // take ~10s), so give it a generous window before letting the ad-laden
+    // embed through — an early release is exactly how the provider's own
+    // player flashes over ours.
     const fallbackTimer = isUniversal
       ? setTimeout(() => {
           if (cancelled) return;
@@ -680,7 +683,7 @@ const Watch = () => {
             resolveFailHandledRef.current = true;
             iframeErrorRef.current?.();
           }
-        }, 8000)
+        }, 20000)
       : null;
     return () => {
       cancelled = true;
@@ -1392,37 +1395,39 @@ const Watch = () => {
       <div className={`${styles.loader} skeleton`}></div>
 
       {playbackMode === "direct" && streamUrl && !iframeError && (
-        <CustomPlayer
-          key={`${currentProvider?.id}-${domainVersion}`}
-          src={streamUrl}
-          title={data?.name || data?.title}
-          poster={
-            data?.backdrop_path || data?.poster_path
-              ? `${TMDB_IMAGE_URL}${data?.backdrop_path || data?.poster_path}`
-              : undefined
-          }
-          startSeconds={resumeSeconds}
-          onProgress={(currentSeconds) =>
-            commitWatchProgress(0, currentSeconds)
-          }
-          onEnded={() => {
-            if (type === "tv") {
-              handleForward();
-            } else {
-              removeContinueWatching({ type, id });
-              toast.success("Finished", {
-                description:
-                  "You've completed this title — it left your Continue Watching row.",
-                duration: 3500,
-                position: "top-center",
-              });
+        <div className={styles.playerLayer}>
+          <CustomPlayer
+            key={`${currentProvider?.id}-${domainVersion}`}
+            src={streamUrl}
+            title={data?.name || data?.title}
+            poster={
+              data?.backdrop_path || data?.poster_path
+                ? `${TMDB_IMAGE_URL}${data?.backdrop_path || data?.poster_path}`
+                : undefined
             }
-          }}
-          onFail={() => {
-            setIframeLoading(true);
-            iframeErrorRef.current?.();
-          }}
-        />
+            startSeconds={resumeSeconds}
+            onProgress={(currentSeconds) =>
+              commitWatchProgress(0, currentSeconds)
+            }
+            onEnded={() => {
+              if (type === "tv") {
+                handleForward();
+              } else {
+                removeContinueWatching({ type, id });
+                toast.success("Finished", {
+                  description:
+                    "You've completed this title — it left your Continue Watching row.",
+                  duration: 3500,
+                  position: "top-center",
+                });
+              }
+            }}
+            onFail={() => {
+              setIframeLoading(true);
+              iframeErrorRef.current?.();
+            }}
+          />
+        </div>
       )}
 
       {playbackMode !== "direct" &&

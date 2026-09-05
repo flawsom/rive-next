@@ -12,6 +12,11 @@
     z-index: 0;
   }
   .iframe {
+    /* The playing surface is THE screen: absolutely positioned above the
+       document flow so content rows (More Like This) can never flex-squeeze
+       it into a sliver. */
+    position: absolute;
+    inset: 0;
     height: 100%;
     width: 100%;
     border: none;
@@ -21,6 +26,12 @@
     ::-webkit-scrollbar {
       display: none !important;
     }
+  }
+  .playerLayer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: #000;
   }
   .source {
     position: absolute;
