@@ -51,6 +51,32 @@ probes CloudStream repos + mirrors and promotes the best live domain into the
 live map, browser-side + via `/api/providers/domains`). The new videm tier
 makes playback fully independent of that env var. No env change needed.
 
+## ⚡ Session 4b — direct-first playback + hdhub4u status + env answer
+
+- **Direct-first watch flow (`src/pages/watch.tsx`):** for universal providers
+  the extractor now runs at 0ms and GATES the embed — the ad-laden,
+  click-gated iframe (2Embed's play-button page) no longer flashes or mounts
+  while a direct stream is available; the user sees our CustomPlayer + UI.
+  The embed only mounts after extraction proves empty (`directChecked`), or
+  an 8s safety timeout. Also fixed the playback-mode HEAD sniff regex
+  (`mpegurl` matching) in the same file — the earlier Session 4 fix only
+  covered the extract-boost copy.
+- **hdhub4u today (probed live):** `hdhub4u.com` answers 200 but is a JS/JWT
+  anti-bot challenge loop (486-byte "Loading..." + `?ch=1&js=<JWT>` → consent
+  stub, no cookie set) — unreachable from serverless, same class as before.
+  `hdhub4u.bi`/`hdhub4u.tv` → Cloudflare "Just a moment"; `hdhub4u.mx` →
+  parity.domains parked lander; `hdhub.cfd` → unreachable. Pool updated with
+  the fresh candidates (`hdhub4u.bi/.tv/.mx`, `hdhub.cfd`) so discovery picks
+  them up the moment one comes alive. The resolver's shell gates keep parked
+  pages from ever mounting.
+- **NEXT_PUBLIC_STREAM_URL:** it is a build-time seed ONLY (inlined into the
+  client bundle), so editing it requires a redeploy; the app does NOT depend
+  on it for playback. Runtime autonomy lives in `domainDiscovery.tsx`:
+  every 15 min it probes the CloudStream-repo pool + mirrors, promotes the
+  best verified domain into the live map (browser localStorage + per-instance
+  server cache), and the watch page re-promotes on load. Sandbox seed set to
+  `https://hdhub4u.com`; production env stays user-managed.
+
 ### One more production bug found & fixed in Session 4 (`832179f`)
 
 The `/api/proxy/media/<encoded-url>` PATH form never reached the API route on

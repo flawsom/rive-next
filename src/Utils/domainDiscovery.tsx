@@ -58,6 +58,10 @@ const PROVIDER_DOMAINS: Record<string, string[]> = {
   hdhub4u: [
     "hdhub4u.com",
     "www.hdhub4u.com",
+    "hdhub4u.bi",
+    "hdhub4u.tv",
+    "hdhub4u.mx",
+    "hdhub.cfd",
     "hdhub4u.nocensor.cloud",
     "hdhub4u.unblockit.pages.dev",
     "hdhub4u.unblockninja.com",

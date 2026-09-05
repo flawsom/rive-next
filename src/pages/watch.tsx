@@ -362,8 +362,14 @@ const Watch = () => {
 
   // streamUrl must be declared before callbacks that reference it
   const [streamOverride, setStreamOverride] = useState<string | null>(null);
+  // Direct-first flag: for universal id-routed providers the direct-stream
+  // extraction is the PRIMARY path — the (ad-laden, click-gated) embed iframe
+  // is held back until extraction finishes and proves there is no direct
+  // stream, so our own player + UI is what the user sees, never the embed.
+  const [directChecked, setDirectChecked] = useState(true);
   useEffect(() => {
     setStreamOverride(null); // new source/episode → drop any extracted stream
+    setDirectChecked(false); // re-run direct-first for the new source
   }, [currentProvider, id, season, episode]);
 
   // ─── Title-based page resolution ────────────────────────────────────────
@@ -549,9 +555,7 @@ const Watch = () => {
     })
       .then((res) => {
         const contentType = res.headers.get("content-type") || "";
-        const direct = /video\/|application\/vnd\.apple\.mpegurl|audio\//.test(
-          contentType,
-        );
+        const direct = /video\/|mpegurl|audio\//.test(contentType);
         directMediaCache.current[url] = direct;
         setPlaybackMode(direct ? "direct" : "embed");
         if (direct) setIframeLoading(false);
@@ -563,11 +567,13 @@ const Watch = () => {
       .finally(() => clearTimeout(timer));
   }, [streamUrl]);
 
-  // ─── Direct-stream extraction boost ─────────────────────────────────────
-  // While the embed loads, quietly ask the extraction endpoint for direct
-  // HLS/mp4 candidates. A verified direct stream beats any embed (native
-  // quality/subtitle controls, cast, watch-party), so the first candidate
-  // that passes the proxy content-type check takes over playback.
+  // ─── Direct-stream extraction (primary for universals) ──────────────────
+  // Ask the extraction endpoint for direct HLS/mp4 candidates. For universal
+  // id-routed providers this is the PRIMARY path: the ad-laden, click-gated
+  // embed iframe is held back (directChecked) until extraction finishes and
+  // proves there is no direct stream. A verified direct stream beats any
+  // embed (native quality/subtitle controls, cast, watch-party), so the
+  // first candidate that passes the proxy content-type check takes over.
   useEffect(() => {
     if (!currentProvider || !id || !type) return;
     if (
@@ -576,6 +582,8 @@ const Watch = () => {
     ) {
       return; // already on a direct stream from the primary URL
     }
+    const isUniversal = !!currentProvider.urlPattern;
+    if (isUniversal) setDirectChecked(false); // hold the embed back
     let cancelled = false;
     const controller = new AbortController();
     const params = new URLSearchParams({
@@ -620,13 +628,26 @@ const Watch = () => {
         }
       } catch {
         // extraction unavailable — the embed path continues undisturbed
+      } finally {
+        // Direct attempt finished (found, empty, or errored) — the embed
+        // fallback may now mount if no direct stream took over.
+        if (!cancelled && isUniversal) setDirectChecked(true);
       }
     };
-    const timer = setTimeout(run, 400); // direct streams take over almost instantly
+    // Universals run the extraction immediately (it gates the embed); other
+    // providers keep the boost but never block the embed mount.
+    const timer = setTimeout(run, isUniversal ? 0 : 400);
+    // Safety net: if extraction hangs, let the embed fallback through.
+    const fallbackTimer = isUniversal
+      ? setTimeout(() => {
+          if (!cancelled) setDirectChecked(true);
+        }, 8000)
+      : null;
     return () => {
       cancelled = true;
       controller.abort();
       clearTimeout(timer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
     };
   }, [
     currentProvider,
@@ -1365,18 +1386,21 @@ const Watch = () => {
         />
       )}
 
-      {playbackMode !== "direct" && streamUrl && !iframeError && (
-        <iframe
-          ref={iframeRef}
-          scrolling="no"
-          src={streamUrl}
-          className={styles.iframe}
-          allowFullScreen
-          allow="autoplay; fullscreen; picture-in-picture"
-          onLoad={handleIframeLoad}
-          onError={handleIframeError}
-        />
-      )}
+      {playbackMode !== "direct" &&
+        streamUrl &&
+        !iframeError &&
+        (directChecked || !currentProvider?.urlPattern) && (
+          <iframe
+            ref={iframeRef}
+            scrolling="no"
+            src={streamUrl}
+            className={styles.iframe}
+            allowFullScreen
+            allow="autoplay; fullscreen; picture-in-picture"
+            onLoad={handleIframeLoad}
+            onError={handleIframeError}
+          />
+        )}
 
       {iframeError && (
         <div className={styles.sourceMessage}>
