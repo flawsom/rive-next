@@ -568,7 +568,17 @@ const Watch = () => {
     })
       .then((res) => {
         const contentType = res.headers.get("content-type") || "";
-        const direct = /video\/|mpegurl|audio\//.test(contentType);
+        const direct = res.ok && /video\/|mpegurl|audio\//.test(contentType);
+        // A minted stream-API URL (videm _stream/cap.php) that fails
+        // verification is DEAD — it must never be mounted as an iframe:
+        // the endpoint answers raw JSON ({"error":"unavailable"}), which
+        // is exactly the fullscreen JSON the user saw. Route it into the
+        // source-failure pipeline instead.
+        if (!direct && /videm\.xyz\/(_stream|cap\.php)/i.test(url)) {
+          directMediaCache.current[url] = false;
+          setIframeError(true);
+          return;
+        }
         directMediaCache.current[url] = direct;
         setPlaybackMode(direct ? "direct" : "embed");
         if (direct) setIframeLoading(false);
@@ -627,6 +637,12 @@ const Watch = () => {
             if (head.ok && /video\/|mpegurl|audio\//.test(ct)) {
               if (cancelled) return;
               applied = true;
+              // Cache the verdict BEFORE assigning: the playback-mode effect
+              // re-probes any non-extension URL it hasn't cached, and a
+              // second HEAD can fail (videm tokens expire) — which used to
+              // flip the URL to "embed" mode and mount the raw stream API
+              // (videm answers {"error":"unavailable"}) in the iframe.
+              directMediaCache.current[candidate.url] = true;
               setStreamOverride(candidate.url);
               setIframeError(false);
               setIframeLoading(false);
