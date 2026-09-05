@@ -343,6 +343,32 @@ Also this session:
   CF-challenged site is impossible without a browser runtime; the user
   insists these domains work (true from their browser, false from Vercel).
 
+### Session 6b (Sept 5, `31024cd`) — false 2Embed resolver miss killed real titles
+
+User report: watch?type=movie&id=1213243 ("Toxic: A Fairy Tale for Grown-ups
+2026") shows an error message even though the title exists on 2Embed.
+
+**Root causes (both fixed, verified live):**
+
+1. `verifyUniversalEmbed` checked the outer `/movie/{id}` page — 2Embed
+   renders an EMPTY title ` () - 2Embed` there for titles it genuinely has
+   (Toxic is a live example; Inception gets a real title). The false miss
+   cached `ok:false` for 10 min and fired the provider-switch cascade.
+   **Fix:** movie embeds now verify the `/embed/{tmdbId}` page they actually
+   mount — real titles carry the name, missing titles render the generic
+   `2Embed.cc - Player` shell (rejected by a new generic-title check). TV
+   embeds render a constant "Breaking Bad" placeholder title for every id,
+   so TV still verifies the outer `/tv/{id}` page ("Unknown TV Show" =
+   miss). Transient fetch errors now fail open instead of caching a miss.
+2. A fast cached resolver miss auto-switched providers immediately and
+   CANCELED the parallel direct-stream extraction that was about to deliver
+   playback. Universal resolve misses now set `deferSwitchOnExtractRef` and
+   the switch fires only when extraction also comes up empty (or hangs 8s).
+
+Production verify matrix (all green on the new build):
+`1213243/27205/155` ok:true · `999999999` ok:false · `tv/1396` ok:true ·
+`tv/999999999` ok:false · extract 1213243 → 1 direct HLS (SWH-Hindi).
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
