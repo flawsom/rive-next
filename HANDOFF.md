@@ -369,6 +369,24 @@ Production verify matrix (all green on the new build):
 `1213243/27205/155` ok:true · `999999999` ok:false · `tv/1396` ok:true ·
 `tv/999999999` ok:false · extract 1213243 → 1 direct HLS (SWH-Hindi).
 
+### Session 6c (Sept 6, `a7455d5`) — layout squeeze + embed flash-over, both fixed
+
+User screenshot: video squeezed into a thin left strip with the More-Like-
+This poster row beside it, and the provider's own embed player showing.
+
+1. **Layout squeeze:** `.watch` is a flex row and MoreLikeThis is an
+   in-flow sibling of the playing surface, so its wide poster list flex-
+   squeezed the video into a sliver. Fix: the player is now wrapped in a
+   `.playerLayer` and the iframe got `position:absolute; inset:0` — both
+   are full-screen layers above the content flow (`.watch` is
+   `overflow:hidden`), so no sibling can ever deform them.
+2. **Embed flash-over:** the 8s extraction fallback released the embed
+   before slow cold-start extractions finished (Toxic took ~10s). The hang
+   guard is now 20s, and extract.ts skips legacy HTML/iframe/API scraping
+   when the videm direct tier has streams (that scraping found nothing on
+   JS-driven universal players and added ~10s serial latency). Extract
+   timing on production after the fix: **1.4–1.8s** (was ~10s).
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
