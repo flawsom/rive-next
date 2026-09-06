@@ -1521,6 +1521,8 @@ const Watch = () => {
             key={`${currentProvider?.id}-${domainVersion}`}
             src={streamUrl}
             title={data?.name || data?.title}
+            contentId={`${type || "movie"}-${id ?? ""}`}
+            providerId={currentProvider?.id}
             poster={
               data?.backdrop_path || data?.poster_path
                 ? `${TMDB_IMAGE_URL}${data?.backdrop_path || data?.poster_path}`

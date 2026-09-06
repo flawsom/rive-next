@@ -5,6 +5,70 @@
 
 ---
 
+## ⚡ Session 9 — APEX PRD phase 2: DASH engine, auto-chapters, mini player, telemetry
+
+Implements the slice of the APEX PLAYER PRD that Session 8 deliberately
+deferred (see its "Deliberately deferred" note), plus a new observability
+layer. Typecheck passes (`bun tsc -b --noEmit`); NOT yet verified on
+production — same rule as always: confirm in the browser before claiming
+success.
+
+### 1) DASH tier via shaka-player (`CustomPlayer`)
+
+- New dependency `shaka-player@5.2.9`. URLs matching `.mpd` now load through
+  shaka with ABR, bufferingGoal 30, and retryParameters (maxAttempts 3);
+  variant tracks feed the existing quality menu; shaka's bandwidth estimate
+  feeds the stats overlay every 3s.
+- **Dynamically imported** (`import("shaka-player")`) so the ~400 KB DASH
+  engine never enters the main bundle (PRD bundle-size target). Unsupported
+  browsers or a failed manifest degrade to the plain `<video>` path — never
+  to a dead player. Load errors 1000–1999 route into `onFail` → the normal
+  provider-fallback pipeline.
+- DASH/​HLS/​file mode now also surfaces in telemetry sessions.
+
+### 2) Auto-chapters — client scene-cut detection (`src/Utils/chapters.ts`)
+
+- ~25 s after a stream settles, the player samples 28 frames across the
+  duration (128 px canvas), computes RGB histograms, and marks chapters where
+  the histogram distance spikes (≥0.34, ≥90 s apart, trailing noise <60 s
+  dropped). Runs on the SAME video element (works for hls.js and shaka MSE);
+  playback position is restored after each seek so the user never sees the
+  sampling scrub.
+- UI: chapter tick marks on the custom seekbar (click to jump) + a
+  Settings → **Chapters** submenu listing each chapter with a lazy 96 px
+  JPEG thumbnail captured on first menu open (shimmer placeholder until
+  captured). Titles that are too short or CORS-tainted simply show "No
+  chapters detected" — every failure is soft.
+
+### 3) Mini player (`CustomPlayer` + SCSS)
+
+- New expand/contract button in the control bar toggles a floating corner
+  window (`position:fixed; bottom/right; 16:9; rounded + shadow + entrance
+animation`). In mini mode menus/volume/time readout hide; PiP remains for
+  true detached playback. CSS-only positioning — no portal, so MediaSession,
+  cast, and watch-party sync keep working.
+
+### 4) Playback telemetry (PRD §6) — `src/Utils/telemetry.ts` + `/api/telemetry/playback`
+
+- Client: one session per mounted player (mode, contentId, providerId,
+  startupMs, rebuffers, errors, watchSeconds, exitedBeforeStart). Flushes on
+  unmount via `navigator.sendBeacon` (fetch-keepalive fallback); watch time
+  accumulates in a ref (playing-only) to avoid per-second storage writes.
+- Server: POST accepts one session (sendBeacon content-type tolerant,
+  fields clamped) into a per-instance 500-session ring buffer;
+  `GET ?action=summary` returns sessions/median+p95 startup/rebuffers/
+  errors/exit-before-start/watch seconds. Zero infra, no new env vars.
+- `watch.tsx` passes `contentId={type}-{id}` and `providerId` into the
+  player so sessions are attributable.
+
+### Still deferred from the PRD (unchanged)
+
+WebRTC/WHIP-WHEP, P2P mesh, thumbnail scrub strip on the seekbar (bandwidth
+cost on proxied direct streams), AI captions/translation, ads (the product
+is anti-ads by identity), DRM (deliberately not built).
+
+---
+
 ## ⚡ Session 8 — the "absolute best player" batch (APEX-style UX tier)
 
 Applied the high-value slice of the APEX PLAYER PRD to `CustomPlayer`:
@@ -41,11 +105,13 @@ Applied the high-value slice of the APEX PLAYER PRD to `CustomPlayer`:
   `localStorage` (`OpenStreamPlayerPrefs`), applied post-hydration to keep
   SSR renders deterministic.
 
-### Deliberately deferred from the PRD (next phase)
+### Deliberately deferred from the PRD (next phase — shipped in Session 9)
 
 WebRTC/WHIP-WHEP, P2P mesh, AI scene-analysis chapters, thumbnail scrub
 strips (bandwidth cost on direct streams), server-side telemetry pipeline
 (client stats overlay shipped instead). Not needed for VOD instant playback.
+**Session 9 shipped auto-chapters, the DASH engine, mini player and the
+telemetry endpoint**; WebRTC/P2P remain deliberately out of scope.
 
 ---
 

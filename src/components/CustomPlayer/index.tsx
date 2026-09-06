@@ -25,7 +25,24 @@ import {
   BsQuestionCircle,
   BsGraphUp,
   BsSunFill,
+  BsListUl,
+  BsArrowsAngleContract,
+  BsArrowsAngleExpand,
+  BsMusicNoteBeamed,
 } from "react-icons/bs";
+import {
+  generateChapters,
+  captureChapterThumb,
+  type Chapter,
+} from "@/Utils/chapters";
+import {
+  startPlaybackSession,
+  trackFirstFrame,
+  trackRebuffer,
+  trackError,
+  flushPlaybackSession,
+  type PlaybackSession,
+} from "@/Utils/telemetry";
 
 // All media flows through the SSRF-guarded proxy so CORS never blocks playback.
 // Only the QUERY form is used: the path form (`/api/proxy/media/<encoded>`)
@@ -49,6 +66,10 @@ interface CustomPlayerProps {
   startSeconds?: number;
   subtitles?: SubtitleTrack[];
   startMuted?: boolean;
+  /** Stable per-title id ("movie-27205") used for playback telemetry. */
+  contentId?: string;
+  /** Source provider id ("twoembed") used for playback telemetry. */
+  providerId?: string;
   onEnded?: () => void;
   onFail?: (reason: string) => void;
   onProgress?: (currentSeconds: number, durationSeconds: number) => void;
@@ -62,6 +83,18 @@ interface CustomPlayerProps {
 // everything else goes through hls.js (which proxies every request).
 const isHlsUrl = (url: string) =>
   !/\\.(mp4|webm|ogv|ogg|mov|m4v|mkv|avi)(\\?|$)/i.test(url);
+
+// DASH manifests (.mpd) route through shaka-player (APEX PRD 3.1): adaptive
+// DASH ladders from providers that serve them get the same ABR/quality-menu
+// treatment as HLS, still fully proxied through our origin.
+const isDashUrl = (url: string) => /\.mpd($|\?)|\/manifest\.mpd/i.test(url);
+
+const playbackModeLabel = (url: string) =>
+  isDashUrl(url)
+    ? "DASH (shaka)"
+    : isHlsUrl(url)
+      ? "HLS (hls.js)"
+      : "Direct file";
 
 /** minimal SRT → WebVTT conversion (timestamps + clamp) */
 function srtToVtt(text: string): string {
@@ -194,6 +227,8 @@ const CustomPlayer = ({
   startSeconds,
   subtitles,
   startMuted,
+  contentId,
+  providerId,
   onEnded,
   onFail,
   onProgress,
@@ -229,12 +264,18 @@ const CustomPlayer = ({
   const [showControls, setShowControls] = useState(true);
   const [levels, setLevels] = useState<{ id: number; height: number }[]>([]);
   const [currentLevel, setCurrentLevel] = useState(-1); // -1 = auto
+  // In-manifest audio tracks (dubs): both engines expose them; the menu lets
+  // the user switch language mid-play (PRD 3.5 / ROADMAP multi-audio row).
+  const [audioTracks, setAudioTracks] = useState<
+    { id: number; label: string }[]
+  >([]);
+  const [activeAudio, setActiveAudio] = useState(0);
   const [subtitleTracks, setSubtitleTracks] = useState<
     { index: number; label: string }[]
   >([]);
   const [activeSubtitle, setActiveSubtitle] = useState<number>(-1);
   const [menu, setMenu] = useState<
-    "quality" | "speed" | "subs" | "settings" | null
+    "quality" | "speed" | "subs" | "settings" | "chapters" | "audio" | null
   >(null);
 
   // ─── Ultra-player additions ──────────────────────────────────────────────
@@ -274,6 +315,20 @@ const CustomPlayer = ({
   const suppressClickRef = useRef(false);
   const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null);
 
+  // ─── APEX Session 9: DASH engine, auto-chapters, mini player, telemetry ──
+  const shakaRef = useRef<{ destroy?: () => Promise<void> } | null>(null);
+  const [isDash, setIsDash] = useState(false);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [chapterThumbs, setChapterThumbs] = useState<Record<string, string>>(
+    {},
+  );
+  const [chaptersBusy, setChaptersBusy] = useState(false);
+  const chaptersGeneratedForRef = useRef<string>("");
+  const [miniPlayer, setMiniPlayer] = useState(false);
+  const watchTimeRef = useRef(0);
+  const watchTickRef = useRef(0);
+  const sessionFlushedRef = useRef(false);
+
   // Apply stored prefs once after mount (client-only, post-hydration).
   useEffect(() => {
     const stored = loadPrefs();
@@ -287,6 +342,39 @@ const CustomPlayer = ({
   useEffect(() => {
     savePrefs({ volume, rate, ambient });
   }, [volume, rate, ambient]);
+
+  // ─── Telemetry session lifecycle (PRD §6) ────────────────────────────────
+  // One session per mounted player instance (per stream). Flushes on unmount
+  // via sendBeacon so tab closes never lose the sample.
+  useEffect(() => {
+    sessionFlushedRef.current = false;
+    startPlaybackSession(
+      isDashUrl(src) ? "dash" : isHlsUrl(src) ? "hls" : "file",
+      contentId,
+      providerId,
+    );
+    return () => {
+      if (sessionFlushedRef.current) return;
+      sessionFlushedRef.current = true;
+      flushPlaybackSession(watchTimeRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, contentId, providerId]);
+
+  // Accumulate real watch time (playing only) for the telemetry flush.
+  useEffect(() => {
+    if (!playing) return;
+    watchTickRef.current = Date.now();
+    const tick = setInterval(() => {
+      watchTimeRef.current += (Date.now() - watchTickRef.current) / 1000;
+      watchTickRef.current = Date.now();
+    }, 1000);
+    return () => {
+      clearInterval(tick);
+      watchTimeRef.current += (Date.now() - watchTickRef.current) / 1000;
+      watchTickRef.current = 0;
+    };
+  }, [playing]);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -321,7 +409,110 @@ const CustomPlayer = ({
       }
     };
 
-    if (isHlsUrl(src) && Hls.isSupported()) {
+    if (isDashUrl(src)) {
+      // ─── DASH tier (shaka-player, APEX PRD 3.1) ────────────────────────────
+      // Dynamically imported: the ~400KB DASH engine never enters the main
+      // bundle (PRD bundle-size target). On any load failure we degrade to
+      // the plain <video> path, never to a dead player.
+      let disposed = false;
+      import("shaka-player")
+        .then((mod) => {
+          if (disposed) return null;
+          const ShakaCtor = (mod as { default?: any }).default || mod;
+          ShakaCtor.polyfill.installAll();
+          if (!ShakaCtor.Player.isBrowserSupported()) return null;
+          const player = new ShakaCtor.Player();
+          shakaRef.current = player;
+          return player;
+        })
+        .then((player) => {
+          if (destroyed || disposed) {
+            player?.destroy?.().catch?.(() => {});
+            return;
+          }
+          if (!player) {
+            // No shaka / unsupported browser → native file path fallback.
+            video.src = proxiedQuery(src);
+            setWaiting(false);
+            video.play().catch(() => setPlaying(false));
+            return;
+          }
+          const onError = (err: unknown) => {
+            const code = (err as { code?: number })?.code;
+            // 1000-1999 = load/manifest failures → provider fallback.
+            if (typeof code === "number" && code >= 1000 && code < 2000) {
+              onFail?.("DASH manifest unavailable");
+            }
+          };
+          player.configure({
+            streaming: {
+              bufferingGoal: 30,
+              rebufferingGoal: 1,
+              retryParameters: { maxAttempts: 3 },
+            },
+          });
+          player.addEventListener?.("error", (event: Event) =>
+            onError((event as CustomEvent).detail),
+          );
+          player
+            .load(proxiedQuery(src), startSecondsRef.current)
+            .then(() => {
+              if (destroyed || disposed) return;
+              const variantTracks: any[] = player.getVariantTracks() || [];
+              const parsed = variantTracks
+                .filter((t) => t.height)
+                .map((t) => ({
+                  id: t.id as number,
+                  height: t.height as number,
+                }))
+                .filter(
+                  (t, i, arr) =>
+                    arr.findIndex((x) => x.height === t.height) === i,
+                )
+                .sort((a, b) => b.height - a.height);
+              setLevels(parsed);
+              // Multi-audio (dubs) from the DASH manifest.
+              const audio: any[] = player.getAudioTracks?.() || [];
+              setAudioTracks(
+                audio.map((t, index) => ({
+                  id: (t.id ?? index) as number,
+                  label: t.label || t.language || `Audio ${index + 1}`,
+                })),
+              );
+              const activeIdx = audio.findIndex((t) => t.active || t.selected);
+              setActiveAudio(activeIdx >= 0 ? activeIdx : 0);
+              setIsDash(true);
+              setWaiting(false);
+              video.play().catch(() => setPlaying(false));
+            })
+            .catch(onError);
+          // Mirror shaka's bandwidth estimate into the stats overlay.
+          const statsTimer = setInterval(() => {
+            if (destroyed || disposed) return;
+            const shakaStats = player.getStats?.() as
+              | { streamBandwidth?: number; estimatedBandwidth?: number }
+              | undefined;
+            const bw =
+              shakaStats?.estimatedBandwidth ||
+              shakaStats?.streamBandwidth ||
+              0;
+            if (bw > 0) {
+              setLiveStats((prev) => ({ ...prev, bandwidth: bw }));
+            }
+          }, 3000);
+          cleanupRef.current = () => {
+            disposed = true;
+            clearInterval(statsTimer);
+            player.destroy?.().catch?.(() => {});
+          };
+        })
+        .catch(() => {
+          if (destroyed || disposed) return;
+          video.src = proxiedQuery(src);
+          setWaiting(false);
+          video.play().catch(() => setPlaying(false));
+        });
+    } else if (isHlsUrl(src) && Hls.isSupported()) {
       const hls = new Hls({
         maxBufferLength: 30,
         backBufferLength: 60,
@@ -349,6 +540,14 @@ const CustomPlayer = ({
           .filter((level) => level.height > 0)
           .sort((a, b) => b.height - a.height);
         setLevels(parsed);
+        // Multi-audio (dubs) from the manifest: hls.js exposes audioTracks
+        // with name/lang for providers that mux alternate dubs.
+        const tracks = (hls.audioTracks || []).map((track, index) => ({
+          id: index as number,
+          label: track.name || track.lang || `Audio ${index + 1}`,
+        }));
+        setAudioTracks(tracks);
+        setActiveAudio(hls.audioTrack ?? 0);
         setWaiting(false);
         video.play().catch(() => setPlaying(false));
       });
@@ -378,12 +577,31 @@ const CustomPlayer = ({
           onFail?.("HLS playback failed");
         }
       });
+      // In-manifest WebVTT subtitles (many providers ship English subs):
+      // surface them in the same subtitle menu as uploaded/remote tracks.
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
+        if (destroyed) return;
+        const inManifest = (data.subtitleTracks || [])
+          .map((track, index) => ({
+            index: index as number,
+            label: track.name || track.lang || `Subtitles ${index + 1}`,
+          }))
+          .filter((t) => t.label);
+        if (inManifest.length > 0) {
+          setSubtitleTracks((prev) => {
+            const known = new Set(prev.map((t) => t.label));
+            const additions = inManifest.filter((t) => !known.has(t.label));
+            return additions.length > 0 ? [...prev, ...additions] : prev;
+          });
+        }
+      });
       hls.attachMedia(video);
     } else {
       video.src = proxiedQuery(src);
       setWaiting(false);
       video.play().catch(() => setPlaying(false));
     }
+    if (!isDashUrl(src)) setIsDash(false);
 
     const onLoaded = () => {
       setDuration(video.duration || 0);
@@ -413,13 +631,16 @@ const CustomPlayer = ({
       setWaiting(true);
       if (playingRef.current) {
         rebuffersRef.current += 1;
+        trackRebuffer();
         setLiveStats((prev) => ({ ...prev, rebuffers: rebuffersRef.current }));
       }
     });
     video.addEventListener("playing", () => {
       setWaiting(false);
       if (startupMs === null) {
-        setStartupMs(Math.round(performance.now() - t0Ref.current));
+        const ms = Math.round(performance.now() - t0Ref.current);
+        setStartupMs(ms);
+        trackFirstFrame(ms);
       }
     });
     video.addEventListener("ended", () => {
@@ -427,6 +648,7 @@ const CustomPlayer = ({
       onEnded?.();
     });
     video.addEventListener("error", () => {
+      trackError();
       onFail?.("Playback error");
     });
     const updateBuffered = () => {
@@ -502,6 +724,15 @@ const CustomPlayer = ({
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      if (shakaRef.current) {
+        const p = shakaRef.current;
+        shakaRef.current = null;
+        p.destroy?.().catch?.(() => {});
+      }
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
       setPlaybackState("none");
       setMediaHandlers({});
       video.removeAttribute("src");
@@ -509,6 +740,9 @@ const CustomPlayer = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, startSeconds, onEnded, onFail, onProgress, title, poster]);
+
+  // Engine-agnostic extra teardown (shaka stats interval).
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   // ─── Ambient glow backdrop ────────────────────────────────────────────────
   // A tiny 64px canvas snapshot of the current frame, blurred to fill the
@@ -895,12 +1129,46 @@ const CustomPlayer = ({
     setMenu(null);
   };
 
+  // Dub switching works on both engines: hls.js sets audioTrack (id = index);
+  // shaka selects via selectAudioTrack and we keep the menu index in sync.
+  const changeAudio = (trackId: number) => {
+    const video = videoRef.current;
+    const resume = video ? video.currentTime : 0;
+    if (shakaRef.current) {
+      const player = shakaRef.current as any;
+      const tracks = player.getAudioTracks?.() || [];
+      const target = tracks[trackId];
+      if (target) {
+        if (typeof player.selectAudioTrack === "function") {
+          player.selectAudioTrack(target);
+        } else if (typeof player.selectVariantTrack === "function") {
+          // Some shaka builds expose variants; pick one matching the audio.
+          const variant = (player.getVariantTracks?.() || []).find(
+            (v: any) => v.audioId === target.id,
+          );
+          if (variant) player.selectVariantTrack(variant, true);
+        }
+      }
+    } else if (hlsRef.current) {
+      hlsRef.current.audioTrack = trackId;
+    }
+    setActiveAudio(trackId);
+    if (video && resume > 0) video.currentTime = resume;
+    setMenu(null);
+    pokeControls();
+  };
+
   const selectSubtitle = (index: number) => {
     const video = videoRef.current;
     if (!video) return;
     const tracks = video.textTracks;
     for (let i = 0; i < tracks.length; i += 1) {
       tracks[i].mode = i === index ? "showing" : "disabled";
+    }
+    // Keep hls.js in sync: -1 disables its subtitle rendering pipeline too.
+    if (hlsRef.current) {
+      hlsRef.current.subtitleTrack =
+        index >= 0 && hlsRef.current.subtitleTracks.length > 0 ? index : -1;
     }
     setActiveSubtitle(index);
     setMenu(null);
@@ -981,10 +1249,79 @@ const CustomPlayer = ({
 
   const playedFraction = duration > 0 ? clamp(current / duration, 0, 1) : 0;
 
+  // ─── Auto-chapters (client-side scene-cut detection, PRD 3.4) ─────────────
+  // Runs once per src, ~25-30s after playback settles (avoids competing with
+  // startup); samples 28 frames and derives chapter boundaries.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || chaptersGeneratedForRef.current === src) return;
+    chaptersGeneratedForRef.current = src;
+    setChapters([]);
+    setChapterThumbs({});
+    const timer = setTimeout(async () => {
+      if (video.readyState < 2 || !Number.isFinite(video.duration)) return;
+      setChaptersBusy(true);
+      try {
+        const detected = await generateChapters(video);
+        if (detected.length >= 2) setChapters(detected);
+      } finally {
+        setChaptersBusy(false);
+      }
+    }, 25_000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+
+  // Lazy per-chapter thumbnails: fill in when the chapters menu opens.
+  useEffect(() => {
+    if (menu !== "chapters" || chapters.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const video = videoRef.current;
+      if (!video) return;
+      for (const chapter of chapters) {
+        if (cancelled) return;
+        const key = String(chapter.start);
+        setChapterThumbs((prev) => {
+          if (prev[key]) return prev; // already captured or in flight
+          void (async () => {
+            const thumb = await captureChapterThumb(video, chapter.start);
+            if (thumb && !cancelled) {
+              setChapterThumbs((p) => ({ ...p, [key]: thumb }));
+            }
+          })();
+          return { ...prev, [key]: "" }; // placeholder = in flight
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [menu, chapters]);
+
+  const jumpToChapter = (start: number) => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = start;
+    setCurrent(start);
+    setMenu(null);
+    pokeControls();
+  };
+
+  // ─── Mini player (floating persistent playback, PRD 3.5) ───────────────
+  // Enter via the contract button or the browser Back button (pagehide);
+  // the player shrinks into a corner while the user browses the site.
+  const exitMiniPlayer = useCallback(() => {
+    setMiniPlayer(false);
+    pokeControls();
+  }, [pokeControls]);
+
   return (
     <div
       ref={containerRef}
-      className={`${styles.player} ${showControls ? "" : styles.hideCursor}`}
+      className={`${styles.player} ${showControls ? "" : styles.hideCursor} ${
+        miniPlayer ? styles.mini : ""
+      }`}
       onMouseMove={pokeControls}
       onMouseLeave={() => setShowControls(false)}
       onClick={onContainerClick}
@@ -1163,6 +1500,25 @@ const CustomPlayer = ({
                   style={{ width: `${playedFraction * 100}%` }}
                 />
               </div>
+              {/* Auto-chapter markers (scene-cut detection) */}
+              {chapters.length > 1 &&
+                chapters.slice(1).map((chapter) => (
+                  <button
+                    key={chapter.start}
+                    type="button"
+                    className={styles.chapterMarker}
+                    style={{
+                      left: `${(chapter.start / (duration || 1)) * 100}%`,
+                    }}
+                    title={`${chapter.label} · ${formatTime(chapter.start)}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      jumpToChapter(chapter.start);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    aria-label={chapter.label}
+                  />
+                ))}
               <div
                 className={styles.seekThumb}
                 style={{ left: `${playedFraction * 100}%` }}
@@ -1274,6 +1630,34 @@ const CustomPlayer = ({
               )}
             </div>
 
+            {audioTracks.length > 1 && (
+              <div className={styles.menuWrap}>
+                <button
+                  className={styles.iconBtn}
+                  onClick={() => setMenu(menu === "audio" ? null : "audio")}
+                  aria-label="Audio language"
+                  title="Audio language (dubs)"
+                >
+                  <BsMusicNoteBeamed />
+                </button>
+                {menu === "audio" && (
+                  <div className={styles.menu}>
+                    {audioTracks.map((track) => (
+                      <button
+                        key={track.id}
+                        className={
+                          activeAudio === track.id ? styles.menuActive : ""
+                        }
+                        onClick={() => changeAudio(track.id)}
+                      >
+                        {track.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className={styles.menuWrap}>
               <button
                 className={styles.iconBtn}
@@ -1360,6 +1744,14 @@ const CustomPlayer = ({
                   </button>
                   <button
                     onClick={() => {
+                      setMenu("chapters");
+                    }}
+                  >
+                    <BsListUl /> Chapters
+                    {chapters.length > 0 ? ` (${chapters.length})` : ""}
+                  </button>
+                  <button
+                    onClick={() => {
                       setShowStats(true);
                       setMenu(null);
                     }}
@@ -1376,9 +1768,61 @@ const CustomPlayer = ({
                   </button>
                 </div>
               )}
+
+              {menu === "chapters" && (
+                <div className={`${styles.menu} ${styles.chaptersMenu}`}>
+                  {chapters.length === 0 && (
+                    <span className={styles.menuEmpty}>
+                      {chaptersBusy
+                        ? "Detecting scenes…"
+                        : "No chapters detected for this stream"}
+                    </span>
+                  )}
+                  {chapters.map((chapter, index) => {
+                    const next = chapters[index + 1];
+                    const end = next ? next.start : duration;
+                    const active = current >= chapter.start && current < end;
+                    const thumb = chapterThumbs[String(chapter.start)];
+                    return (
+                      <button
+                        key={chapter.start}
+                        className={active ? styles.menuActive : ""}
+                        onClick={() => jumpToChapter(chapter.start)}
+                      >
+                        {thumb ? (
+                          <img
+                            src={thumb}
+                            alt=""
+                            className={styles.chapterThumb}
+                          />
+                        ) : (
+                          <span className={styles.chapterThumbGhost} />
+                        )}
+                        <span className={styles.chapterMeta}>
+                          <strong>{chapter.label}</strong>
+                          <small>{formatTime(chapter.start)}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div style={{ flex: 1 }} />
+
+            {/* Mini player: detach into a floating corner window (PRD 3.5) */}
+            <button
+              className={styles.iconBtn}
+              onClick={() => {
+                setMiniPlayer((prev) => !prev);
+                pokeControls();
+              }}
+              aria-label={miniPlayer ? "Expand player" : "Mini player"}
+              title={miniPlayer ? "Expand player" : "Mini player"}
+            >
+              {miniPlayer ? <BsArrowsAngleExpand /> : <BsArrowsAngleContract />}
+            </button>
 
             {canCast && (
               <button
