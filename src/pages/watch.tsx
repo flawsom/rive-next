@@ -65,6 +65,11 @@ const Watch = () => {
   const [isAutoSwitched, setIsAutoSwitched] = useState(false);
   const [previousProviderName, setPreviousProviderName] = useState<string>("");
   const userPickedProvider = useRef(false);
+  // Netflix-style instant start: the first playback session begins MUTED so
+  // autoplay is never blocked (browsers allow muted autoplay) and the video is
+  // on screen immediately; the player shows a "tap for sound" chip. Once the
+  // user brings sound back, every subsequent rotation/stream plays with sound.
+  const soundOnRef = useRef(false);
   const [iframeError, setIframeError] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [domainVersion, setDomainVersion] = useState(0);
@@ -1522,6 +1527,10 @@ const Watch = () => {
                 : undefined
             }
             startSeconds={resumeSeconds}
+            startMuted={!soundOnRef.current}
+            onUnmute={() => {
+              soundOnRef.current = true;
+            }}
             onProgress={(currentSeconds) =>
               commitWatchProgress(0, currentSeconds)
             }

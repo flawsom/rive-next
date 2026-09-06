@@ -5,6 +5,50 @@
 
 ---
 
+## ⚡ Session 8 — the "absolute best player" batch (APEX-style UX tier)
+
+Applied the high-value slice of the APEX PLAYER PRD to `CustomPlayer`:
+
+### Instant playback (the #1 market ask)
+
+- **Muted instant start (Netflix pattern):** the watch page now mounts the
+  player `startMuted` on a fresh session — browsers never block muted
+  autoplay, so the movie is PLAYING on frame one instead of sitting behind a
+  play button. A "🔇 Sound off — tap for sound" chip (auto-hides after 6s)
+  brings audio back in one tap; `onUnmute` flips `soundOnRef` so every later
+  stream rotation plays with sound.
+- `timeToFirstFrame` measured from source-mount to first `playing` event.
+
+### Ultra-player UI/UX
+
+- **Custom seekbar** (replaces the native range input): buffer-fill layer,
+  played gradient in `--ascent-color`, hover time tooltip, click-anywhere +
+  drag scrub with pointer capture.
+- **Playback stats overlay** (`D` or Settings → Playback stats): startup ms,
+  resolution, active HLS level/bitrate (hls.js `LEVEL_SWITCHED/UPDATED`),
+  buffer ahead, dropped/total frames (`getVideoPlaybackQuality`), rebuffer
+  count, mode, speed, volume.
+- **Shortcut hints overlay** (`?` or Settings → Shortcut hints): full key map.
+- **Netflix keys:** `J`/`L` ±10s, `T` speed cycle (1 → 1.25 → 1.5 → 2),
+  `D` stats, `?` hints — all with a `+10s`-style seek toast chip.
+- **Double-click** toggles fullscreen; **double-tap** (touch) seeks ±10s by
+  screen half (with click-suppression so play/pause doesn't double-fire).
+- **Ambient glow mode** (Settings → toggle, default ON, persisted): a 64px
+  canvas snapshot of the live frame, blurred + saturated behind the video
+  (2s cadence + refresh on seek — near-zero cost cinema backdrop while
+  letterboxed content plays).
+- **Cursor auto-hides** with the controls; volume/speed/ambient persist in
+  `localStorage` (`OpenStreamPlayerPrefs`), applied post-hydration to keep
+  SSR renders deterministic.
+
+### Deliberately deferred from the PRD (next phase)
+
+WebRTC/WHIP-WHEP, P2P mesh, AI scene-analysis chapters, thumbnail scrub
+strips (bandwidth cost on direct streams), server-side telemetry pipeline
+(client stats overlay shipped instead). Not needed for VOD instant playback.
+
+---
+
 ## ⚡ Session 7 — refresh-loop fix + catalog direct-file tier (HubCloud/FSL)
 
 ### 1) "It keeps on refreshing" — root cause + fix (`watch.tsx`, `CustomPlayer`)

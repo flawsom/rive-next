@@ -10,6 +10,12 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
+    position: relative;
+    z-index: 1;
+  }
+
+  &.hideCursor {
+    cursor: none;
   }
 
   .spinner {
@@ -251,5 +257,254 @@
 
   svg {
     filter: drop-shadow(0 0 6px rgba(79, 140, 255, 0.6));
+  }
+}
+
+/* ─── Ambient glow backdrop (cinema mode) ─────────────────────────────────── */
+.ambient {
+  position: absolute;
+  inset: -8%;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(48px) saturate(1.35) brightness(0.55);
+  opacity: 0.8;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+/* ─── Muted instant-start chip ("tap for sound") ────────────────────────── */
+.soundChip {
+  position: absolute;
+  bottom: 24%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(20, 20, 24, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2rem;
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  animation: chipIn 0.25s ease;
+  backdrop-filter: blur(10px);
+
+  &:hover {
+    background: rgba(35, 35, 42, 0.94);
+  }
+
+  svg {
+    font-size: 1rem;
+  }
+}
+
+/* ─── Seek toast (Netflix-style +10s / -10s) ─────────────────────────────── */
+.seekToast {
+  position: absolute;
+  bottom: 26%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  background: rgba(20, 20, 24, 0.92);
+  border-radius: 0.6rem;
+  color: #fff;
+  font-family: sans-serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  padding: 0.7rem 1.2rem;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+  animation: chipIn 0.18s ease;
+  pointer-events: none;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Overlays (stats / shortcuts) ───────────────────────────────────────── */
+.overlay {
+  position: absolute;
+  top: 3.4rem;
+  right: 1.2rem;
+  z-index: 7;
+  min-width: 15rem;
+  max-width: 21rem;
+  background: rgba(12, 12, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.7rem;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  animation: chipIn 0.2s ease;
+  cursor: pointer;
+
+  .overlayTitle {
+    color: #fff;
+    font-family: sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.75;
+    margin-bottom: 0.7rem;
+  }
+
+  .overlayHint {
+    color: rgba(255, 255, 255, 0.45);
+    font-family: sans-serif;
+    font-size: 0.68rem;
+    margin-top: 0.7rem;
+    text-align: right;
+  }
+
+  .statGrid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 1rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.72rem;
+
+    span {
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    strong {
+      color: #fff;
+      text-align: right;
+      font-weight: 600;
+    }
+  }
+
+  .shortcutGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+
+    .shortcutRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+
+      kbd {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-bottom-width: 2px;
+        border-radius: 0.3rem;
+        color: #fff;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.68rem;
+        padding: 0.2rem 0.45rem;
+        white-space: nowrap;
+      }
+
+      span {
+        color: rgba(255, 255, 255, 0.8);
+        font-family: sans-serif;
+        font-size: 0.75rem;
+        text-align: right;
+      }
+    }
+  }
+}
+
+/* ─── Custom seekbar (buffer fill + hover tooltip + drag scrub) ──────────── */
+.seekRow {
+  .seekWrap {
+    position: relative;
+    flex: 1;
+    height: 1.1rem;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    touch-action: none;
+
+    .seekTrack {
+      position: relative;
+      width: 100%;
+      height: 0.3rem;
+      border-radius: 1rem;
+      background: rgba(255, 255, 255, 0.22);
+      overflow: hidden;
+
+      .seekBuffer {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.35);
+      }
+
+      .seekPlayed {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        background: linear-gradient(90deg, var(--ascent-color), #7aa7ff);
+      }
+    }
+
+    .seekThumb {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 50%;
+      background: var(--ascent-color);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+    }
+
+    &:hover .seekThumb,
+    &:active .seekThumb {
+      opacity: 1;
+    }
+
+    .seekTooltip {
+      position: absolute;
+      bottom: 1.5rem;
+      transform: translateX(-50%);
+      background: rgba(12, 12, 16, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 0.35rem;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+  }
+}
+
+@keyframes chipIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .seekRow .seekTooltip {
+    display: none;
+  }
+
+  .overlay {
+    top: auto;
+    bottom: 5.5rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    min-width: 0;
+    max-width: none;
   }
 }

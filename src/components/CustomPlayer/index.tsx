@@ -21,6 +21,10 @@ import {
   BsSpeedometer2,
   BsHddStack,
   BsCast,
+  BsGearFill,
+  BsQuestionCircle,
+  BsGraphUp,
+  BsSunFill,
 } from "react-icons/bs";
 
 // All media flows through the SSRF-guarded proxy so CORS never blocks playback.
@@ -48,6 +52,8 @@ interface CustomPlayerProps {
   onEnded?: () => void;
   onFail?: (reason: string) => void;
   onProgress?: (currentSeconds: number, durationSeconds: number) => void;
+  /** Fired the first time the user brings sound back after a muted start. */
+  onUnmute?: () => void;
 }
 
 // Direct-mode URLs are either real media files or HLS endpoints. Providers
@@ -55,17 +61,17 @@ interface CustomPlayerProps {
 // cap.php?…), so only known native-video extensions take the <video> path;
 // everything else goes through hls.js (which proxies every request).
 const isHlsUrl = (url: string) =>
-  !/\.(mp4|webm|ogv|ogg|mov|m4v|mkv|avi)(\?|$)/i.test(url);
+  !/\\.(mp4|webm|ogv|ogg|mov|m4v|mkv|avi)(\\?|$)/i.test(url);
 
 /** minimal SRT → WebVTT conversion (timestamps + clamp) */
 function srtToVtt(text: string): string {
   const block =
-    "WEBVTT\n\n" +
+    "WEBVTT\\n\\n" +
     text
-      .replace(/\r/g, "")
-      .replace(/^\d+\s*$/gm, "")
-      .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, "$1.$2")
-      .replace(/(\d{2}:\d{2}),(\d{3})/g, "00:$1.$2");
+      .replace(/\\r/g, "")
+      .replace(/^\\d+\\s*$/gm, "")
+      .replace(/(\\d{2}:\\d{2}:\\d{2}),(\\d{3})/g, "$1.$2")
+      .replace(/(\\d{2}:\\d{2}),(\\d{3})/g, "00:$1.$2");
   return block;
 }
 
@@ -81,10 +87,10 @@ const toSeconds = (timestamp: string): number => {
 
 function parseInto(textTrack: TextTrack, text: string): void {
   const vtt =
-    text.trim().startsWith("WEBVTT") || text.includes("\nWEBVTT")
+    text.trim().startsWith("WEBVTT") || text.includes("\\nWEBVTT")
       ? text
       : srtToVtt(text);
-  const lines = vtt.split(/\r?\n/);
+  const lines = vtt.split(/\\r?\\n/);
   let cueStart: string | null = null;
   let cueEnd: string | null = null;
   let payload: string[] = [];
@@ -95,7 +101,7 @@ function parseInto(textTrack: TextTrack, text: string): void {
         const cue = new VTTCue(
           toSeconds(cueStart),
           toSeconds(cueEnd),
-          payload.join("\n").trim(),
+          payload.join("\\n").trim(),
         );
         textTrack.addCue(cue);
       } catch {
@@ -109,7 +115,7 @@ function parseInto(textTrack: TextTrack, text: string): void {
 
   for (const line of lines) {
     const timing = line.match(
-      /^(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})/,
+      /^(\\d{2}:\\d{2}:\\d{2}[.,]\\d{3})\\s*-->\\s*(\\d{2}:\\d{2}:\\d{2}[.,]\\d{3})/,
     );
     if (timing) {
       flush();
@@ -145,6 +151,42 @@ const formatTime = (seconds: number): string => {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
+const SPEED_RATES = [1, 1.25, 1.5, 2];
+
+interface PlayerPrefs {
+  volume: number;
+  rate: number;
+  ambient: boolean;
+}
+
+const DEFAULT_PREFS: PlayerPrefs = { volume: 1, rate: 1, ambient: true };
+const PREFS_KEY = "OpenStreamPlayerPrefs";
+
+const loadPrefs = (): PlayerPrefs => {
+  if (typeof window === "undefined") return DEFAULT_PREFS;
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (raw) return { ...DEFAULT_PREFS, ...JSON.parse(raw) };
+  } catch {
+    // malformed prefs — defaults
+  }
+  return DEFAULT_PREFS;
+};
+
+const savePrefs = (prefs: PlayerPrefs) => {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // storage unavailable
+  }
+};
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const formatMbps = (bps: number) =>
+  bps > 0 ? `${(bps / 1_000_000).toFixed(1)} Mbps` : "—";
+
 const CustomPlayer = ({
   src,
   poster,
@@ -155,6 +197,7 @@ const CustomPlayer = ({
   onEnded,
   onFail,
   onProgress,
+  onUnmute,
 }: CustomPlayerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -170,13 +213,18 @@ const CustomPlayer = ({
   // source with fresh tokens — position must survive that).
   const lastPositionRef = useRef(0);
 
+  const prefsRef = useRef<PlayerPrefs>(loadPrefs());
+
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
   const [waiting, setWaiting] = useState(true);
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(startMuted ? 0 : 1);
+  // Hydration-safe: server and first client render agree on defaults; stored
+  // prefs are applied right after mount (never during hydration).
+  const [volume, setVolume] = useState(DEFAULT_PREFS.volume);
   const [muted, setMuted] = useState(!!startMuted);
-  const [rate, setRate] = useState(1);
+  const [rate, setRate] = useState(DEFAULT_PREFS.rate);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [levels, setLevels] = useState<{ id: number; height: number }[]>([]);
@@ -185,7 +233,64 @@ const CustomPlayer = ({
     { index: number; label: string }[]
   >([]);
   const [activeSubtitle, setActiveSubtitle] = useState<number>(-1);
-  const [menu, setMenu] = useState<"quality" | "speed" | "subs" | null>(null);
+  const [menu, setMenu] = useState<
+    "quality" | "speed" | "subs" | "settings" | null
+  >(null);
+
+  // ─── Ultra-player additions ──────────────────────────────────────────────
+  const [ambient, setAmbient] = useState(prefsRef.current.ambient);
+  const [ambientFrame, setAmbientFrame] = useState<string | null>(null);
+  const ambientCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [showStats, setShowStats] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [bufferedRanges, setBufferedRanges] = useState<
+    { start: number; end: number }[]
+  >([]);
+  const [hoverSec, setHoverSec] = useState<number | null>(null);
+  const [seekToast, setSeekToast] = useState<{
+    id: number;
+    delta: number;
+  } | null>(null);
+  const seekToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showSoundChip, setShowSoundChip] = useState(!!startMuted);
+  const soundChipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Playback observability (PRD: time-to-first-frame, rebuffers, dropped frames).
+  const t0Ref = useRef(0);
+  const rebuffersRef = useRef(0);
+  const [startupMs, setStartupMs] = useState<number | null>(null);
+  const [videoSize, setVideoSize] = useState({ width: 0, height: 0 });
+  const [liveStats, setLiveStats] = useState({
+    levelHeight: 0,
+    bandwidth: 0,
+    bufferAhead: 0,
+    dropped: 0,
+    total: 0,
+    rebuffers: 0,
+  });
+
+  // Custom seekbar scrubbing + double-tap/click suppression.
+  const scrubbingRef = useRef(false);
+  const suppressClickRef = useRef(false);
+  const lastTapRef = useRef<{ t: number; x: number; y: number } | null>(null);
+
+  // Apply stored prefs once after mount (client-only, post-hydration).
+  useEffect(() => {
+    const stored = loadPrefs();
+    setVolume(stored.volume);
+    setRate(stored.rate);
+    setAmbient(stored.ambient);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist user prefs (volume, speed, ambient).
+  useEffect(() => {
+    savePrefs({ volume, rate, ambient });
+  }, [volume, rate, ambient]);
+
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
 
   // ─── HLS / native setup ───────────────────────────────────────────────────
   useEffect(() => {
@@ -201,6 +306,11 @@ const CustomPlayer = ({
       startSecondsRef.current = startSeconds || 0;
     }
     setWaiting(true);
+    setStartupMs(null);
+    setVideoSize({ width: 0, height: 0 });
+    setLiveStats((prev) => ({ ...prev, levelHeight: 0, bandwidth: 0 }));
+    rebuffersRef.current = 0;
+    t0Ref.current = performance.now();
 
     const applyStart = () => {
       if (startSecondsRef.current > 0 && video.duration > 0) {
@@ -244,6 +354,24 @@ const CustomPlayer = ({
       });
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
         setCurrentLevel(data.level);
+        const level = hls.levels[data.level];
+        if (level) {
+          setLiveStats((prev) => ({
+            ...prev,
+            levelHeight: level.height || 0,
+            bandwidth: level.bitrate || 0,
+          }));
+        }
+      });
+      hls.on(Hls.Events.LEVEL_UPDATED, (_event, data) => {
+        const level = hls.levels[data.level];
+        if (level) {
+          setLiveStats((prev) => ({
+            ...prev,
+            levelHeight: level.height || 0,
+            bandwidth: level.bitrate || 0,
+          }));
+        }
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
@@ -281,14 +409,65 @@ const CustomPlayer = ({
     );
     video.addEventListener("play", () => setPlaying(true));
     video.addEventListener("pause", () => setPlaying(false));
-    video.addEventListener("waiting", () => setWaiting(true));
-    video.addEventListener("playing", () => setWaiting(false));
+    video.addEventListener("waiting", () => {
+      setWaiting(true);
+      if (playingRef.current) {
+        rebuffersRef.current += 1;
+        setLiveStats((prev) => ({ ...prev, rebuffers: rebuffersRef.current }));
+      }
+    });
+    video.addEventListener("playing", () => {
+      setWaiting(false);
+      if (startupMs === null) {
+        setStartupMs(Math.round(performance.now() - t0Ref.current));
+      }
+    });
     video.addEventListener("ended", () => {
       setPlaying(false);
       onEnded?.();
     });
     video.addEventListener("error", () => {
       onFail?.("Playback error");
+    });
+    const updateBuffered = () => {
+      const ranges: { start: number; end: number }[] = [];
+      try {
+        for (let i = 0; i < video.buffered.length; i += 1) {
+          ranges.push({
+            start: video.buffered.start(i),
+            end: video.buffered.end(i),
+          });
+        }
+      } catch {
+        // buffered access can throw during teardown
+      }
+      setBufferedRanges(ranges);
+      let ahead = 0;
+      for (const range of ranges) {
+        if (
+          video.currentTime >= range.start &&
+          video.currentTime <= range.end
+        ) {
+          ahead = range.end - video.currentTime;
+          break;
+        }
+      }
+      const quality = video.getVideoPlaybackQuality?.();
+      setLiveStats((prev) => ({
+        ...prev,
+        bufferAhead: ahead,
+        dropped: quality?.droppedVideoFrames ?? prev.dropped,
+        total: quality?.totalVideoFrames ?? prev.total,
+      }));
+    };
+    video.addEventListener("progress", updateBuffered);
+    video.addEventListener("loadedmetadata", () => {
+      setVideoSize({ width: video.videoWidth, height: video.videoHeight });
+      updateBuffered();
+    });
+    video.addEventListener("seeked", () => {
+      // Ambient backdrop refreshes on jump too (pause won't trigger the loop).
+      if (ambientRef.current) captureAmbientFrame();
     });
 
     // ─── OS media integration (lockscreen / media flyout) ───────────────────
@@ -328,7 +507,45 @@ const CustomPlayer = ({
       video.removeAttribute("src");
       video.load();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src, startSeconds, onEnded, onFail, onProgress, title, poster]);
+
+  // ─── Ambient glow backdrop ────────────────────────────────────────────────
+  // A tiny 64px canvas snapshot of the current frame, blurred to fill the
+  // screen behind the video. Costs nothing (2s cadence, 64px) and gives the
+  // premium cinema glow while letterboxed content plays.
+  const ambientRef = useRef(ambient);
+  ambientRef.current = ambient;
+  const captureAmbientFrame = () => {
+    const video = videoRef.current;
+    const canvas = ambientCanvasRef.current;
+    if (!video || !canvas || !video.videoWidth) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    canvas.width = 64;
+    canvas.height = Math.max(
+      1,
+      Math.round((64 * video.videoHeight) / (video.videoWidth || 16)),
+    );
+    try {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      setAmbientFrame(canvas.toDataURL("image/jpeg", 0.55));
+    } catch {
+      // frame capture can throw during teardown
+    }
+  };
+
+  useEffect(() => {
+    if (!ambient) return;
+    const video = videoRef.current;
+    if (!video) return;
+    captureAmbientFrame();
+    const interval = setInterval(() => {
+      if (!video.paused) captureAmbientFrame();
+    }, 2000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ambient]);
 
   // ─── Subtitle tracks ──────────────────────────────────────────────────────
   const addSubtitleTrack = useCallback(async (label: string, url: string) => {
@@ -379,6 +596,34 @@ const CustomPlayer = ({
     };
   }, [pokeControls]);
 
+  // ─── Seek toast (Netflix-style "+10s" chip) ───────────────────────────────
+  const showSeekToast = useCallback((delta: number) => {
+    setSeekToast({ id: Date.now(), delta });
+    if (seekToastTimerRef.current) clearTimeout(seekToastTimerRef.current);
+    seekToastTimerRef.current = setTimeout(() => setSeekToast(null), 750);
+  }, []);
+
+  // ─── Sound handling (muted instant start → tap for sound) ────────────────
+  const unmute = useCallback(() => {
+    const video = videoRef.current;
+    setMuted(false);
+    setShowSoundChip(false);
+    if (soundChipTimerRef.current) clearTimeout(soundChipTimerRef.current);
+    if (video && video.paused) video.play().catch(() => setPlaying(false));
+    onUnmute?.();
+  }, [onUnmute]);
+  const unmuteRef = useRef(unmute);
+  unmuteRef.current = unmute;
+
+  // Auto-hide the sound chip after a few seconds even without interaction.
+  useEffect(() => {
+    if (!startMuted) return;
+    soundChipTimerRef.current = setTimeout(() => setShowSoundChip(false), 6000);
+    return () => {
+      if (soundChipTimerRef.current) clearTimeout(soundChipTimerRef.current);
+    };
+  }, [startMuted]);
+
   // ─── Keyboard shortcuts ───────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -409,11 +654,29 @@ const CustomPlayer = ({
           break;
         case "m":
           event.preventDefault();
-          setMuted((prev) => !prev);
+          if (video.muted) {
+            unmuteRef.current();
+          } else {
+            setMuted(true);
+          }
+          break;
+        case "j":
+          event.preventDefault();
+          video.currentTime = Math.max(0, video.currentTime - 10);
+          showSeekToast(-10);
+          break;
+        case "l":
+          event.preventDefault();
+          video.currentTime = Math.min(
+            video.duration || 0,
+            video.currentTime + 10,
+          );
+          showSeekToast(10);
           break;
         case "arrowleft":
           event.preventDefault();
           video.currentTime = Math.max(0, video.currentTime - 5);
+          showSeekToast(-5);
           break;
         case "arrowright":
           event.preventDefault();
@@ -421,6 +684,7 @@ const CustomPlayer = ({
             video.duration || 0,
             video.currentTime + 5,
           );
+          showSeekToast(5);
           break;
         case "arrowup":
           event.preventDefault();
@@ -430,6 +694,23 @@ const CustomPlayer = ({
         case "arrowdown":
           event.preventDefault();
           setVolume((prev) => Math.max(0, prev - 0.1));
+          break;
+        case "t":
+          event.preventDefault();
+          setRate((prev) => {
+            const index = SPEED_RATES.indexOf(prev);
+            return SPEED_RATES[(index + 1) % SPEED_RATES.length];
+          });
+          break;
+        case "d":
+          event.preventDefault();
+          setShowStats((prev) => !prev);
+          setMenu(null);
+          break;
+        case "?":
+          event.preventDefault();
+          setShowShortcuts((prev) => !prev);
+          setMenu(null);
           break;
       }
     };
@@ -501,9 +782,6 @@ const CustomPlayer = ({
   }, [playing]);
 
   // ─── Cast / remote playback (Chromecast + AirPlay + DIAL) ────────────────
-  // The Remote Playback API covers Chromecast/DIAL devices; Safari exposes
-  // AirPlay through a `webkit-cast` availability hint. We surface one button
-  // that opens the browser's native device picker when available.
   const [canCast, setCanCast] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
   const remoteRef = useRef<any>(null);
@@ -543,7 +821,6 @@ const CustomPlayer = ({
     try {
       if (video.remote && video.remote.state !== "connected") {
         // Remote Playback API (Chromecast/DIAL).
-        const watches = video.remote.getAvailability?.();
         await video.remote.prompt();
         remoteRef.current = video.remote;
         setIsCasting(video.remote.state === "connected");
@@ -568,6 +845,47 @@ const CustomPlayer = ({
       Math.min(video.duration || 0, video.currentTime + delta),
     );
   }, []);
+
+  // ─── Custom seekbar ───────────────────────────────────────────────────────
+  const seekFromEvent = useCallback(
+    (clientX: number) => {
+      const video = videoRef.current;
+      const wrap = seekWrapRef.current;
+      if (!video || !wrap || !duration) return;
+      const rect = wrap.getBoundingClientRect();
+      const frac = clamp((clientX - rect.left) / rect.width, 0, 1);
+      const target = frac * duration;
+      video.currentTime = target;
+      setCurrent(target);
+    },
+    [duration],
+  );
+  const seekWrapRef = useRef<HTMLDivElement>(null);
+
+  const onSeekPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    scrubbingRef.current = true;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // pointer capture unsupported — drag still works over the bar
+    }
+    seekFromEvent(e.clientX);
+    pokeControls();
+  };
+  const onSeekPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (scrubbingRef.current) {
+      seekFromEvent(e.clientX);
+      return;
+    }
+    const wrap = seekWrapRef.current;
+    if (!wrap || !duration) return;
+    const rect = wrap.getBoundingClientRect();
+    const frac = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    setHoverSec(frac * duration);
+  };
+  const onSeekPointerUp = () => {
+    scrubbingRef.current = false;
+  };
 
   const changeQuality = (levelId: number) => {
     if (hlsRef.current) {
@@ -623,13 +941,55 @@ const CustomPlayer = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtitles]);
 
+  // ─── Double-click fullscreen / double-tap seek ────────────────────────────
+  const onContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressClickRef.current) return;
+    togglePlay();
+  };
+  const onContainerDoubleClick = () => {
+    suppressClickRef.current = true;
+    setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 400);
+    toggleFullscreenRef.current();
+    pokeControls();
+  };
+  const onContainerTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    lastTapRef.current = { t: now, x: touch.clientX, y: touch.clientY };
+    if (
+      prev &&
+      now - prev.t < 300 &&
+      Math.abs(touch.clientX - prev.x) < 48 &&
+      Math.abs(touch.clientY - prev.y) < 48
+    ) {
+      // Double tap → seek by side of screen.
+      const rect = containerRef.current?.getBoundingClientRect();
+      const side = rect && touch.clientX > rect.left + rect.width / 2 ? 1 : -1;
+      const delta = 10 * side;
+      seekBy(delta);
+      showSeekToast(delta);
+      suppressClickRef.current = true;
+      setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 400);
+    }
+  };
+
+  const playedFraction = duration > 0 ? clamp(current / duration, 0, 1) : 0;
+
   return (
     <div
       ref={containerRef}
-      className={styles.player}
+      className={`${styles.player} ${showControls ? "" : styles.hideCursor}`}
       onMouseMove={pokeControls}
       onMouseLeave={() => setShowControls(false)}
-      onClick={togglePlay}
+      onClick={onContainerClick}
+      onDoubleClick={onContainerDoubleClick}
+      onTouchEnd={onContainerTouchEnd}
     >
       <video
         ref={videoRef}
@@ -638,6 +998,14 @@ const CustomPlayer = ({
         playsInline
         preload="auto"
       />
+
+      {ambient && ambientFrame && (
+        <div
+          className={styles.ambient}
+          style={{ backgroundImage: `url(${ambientFrame})` }}
+        />
+      )}
+      <canvas ref={ambientCanvasRef} style={{ display: "none" }} />
 
       {waiting && (
         <div className={styles.spinner}>
@@ -665,25 +1033,149 @@ const CustomPlayer = ({
         </div>
       )}
 
+      {showSoundChip && muted && (
+        <button
+          className={styles.soundChip}
+          onClick={(e) => {
+            e.stopPropagation();
+            unmuteRef.current();
+          }}
+          aria-label="Unmute"
+        >
+          <BsVolumeMuteFill /> Sound off — tap for sound
+        </button>
+      )}
+
+      {seekToast && (
+        <div key={seekToast.id} className={styles.seekToast}>
+          {seekToast.delta > 0 ? "+" : ""}
+          {seekToast.delta}s
+        </div>
+      )}
+
+      {showStats && (
+        <div
+          className={styles.overlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowStats(false);
+          }}
+        >
+          <div className={styles.overlayTitle}>Playback stats</div>
+          <div className={styles.statGrid}>
+            <span>Startup</span>
+            <strong>{startupMs !== null ? `${startupMs} ms` : "…"}</strong>
+            <span>Resolution</span>
+            <strong>
+              {videoSize.width > 0
+                ? `${videoSize.width}×${videoSize.height}`
+                : "…"}
+            </strong>
+            <span>Quality</span>
+            <strong>
+              {currentLevel === -1
+                ? `Auto${liveStats.levelHeight ? ` (${liveStats.levelHeight}p)` : ""}`
+                : `${liveStats.levelHeight || "?"}p`}
+            </strong>
+            <span>Bitrate</span>
+            <strong>{formatMbps(liveStats.bandwidth)}</strong>
+            <span>Buffer ahead</span>
+            <strong>{liveStats.bufferAhead.toFixed(1)}s</strong>
+            <span>Dropped frames</span>
+            <strong>
+              {liveStats.total > 0
+                ? `${liveStats.dropped} / ${liveStats.total}`
+                : "—"}
+            </strong>
+            <span>Rebuffers</span>
+            <strong>{liveStats.rebuffers}</strong>
+            <span>Mode</span>
+            <strong>{isHlsUrl(src) ? "HLS (hls.js)" : "Direct file"}</strong>
+            <span>Speed</span>
+            <strong>{rate}×</strong>
+            <span>Volume</span>
+            <strong>{muted ? "Muted" : `${Math.round(volume * 100)}%`}</strong>
+          </div>
+          <div className={styles.overlayHint}>Press D to close</div>
+        </div>
+      )}
+
+      {showShortcuts && (
+        <div
+          className={styles.overlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowShortcuts(false);
+          }}
+        >
+          <div className={styles.overlayTitle}>Keyboard shortcuts</div>
+          <div className={styles.shortcutGrid}>
+            {[
+              ["Space / K", "Play / Pause"],
+              ["← / →", "Back / Forward 5s"],
+              ["J / L", "Back / Forward 10s"],
+              ["↑ / ↓", "Volume"],
+              ["M", "Mute / Unmute"],
+              ["F", "Fullscreen"],
+              ["P", "Picture-in-Picture"],
+              ["T", "Playback speed"],
+              ["D", "Playback stats"],
+              ["? / Shift + /", "This panel"],
+            ].map(([key, action]) => (
+              <div key={key} className={styles.shortcutRow}>
+                <kbd>{key}</kbd>
+                <span>{action}</span>
+              </div>
+            ))}
+          </div>
+          <div className={styles.overlayHint}>Press ? to close</div>
+        </div>
+      )}
+
       {showControls && (
         <div className={styles.controls} onClick={(e) => e.stopPropagation()}>
           {/* seek bar */}
           <div className={styles.seekRow}>
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={1}
-              value={Math.min(current, duration || 0)}
-              onChange={(e) => {
-                const video = videoRef.current;
-                if (!video) return;
-                video.currentTime = Number(e.target.value);
-                setCurrent(Number(e.target.value));
+            <div
+              ref={seekWrapRef}
+              className={styles.seekWrap}
+              onPointerDown={onSeekPointerDown}
+              onPointerMove={onSeekPointerMove}
+              onPointerUp={onSeekPointerUp}
+              onPointerLeave={() => {
+                scrubbingRef.current = false;
+                setHoverSec(null);
               }}
-              className={styles.seek}
-              aria-label="Seek"
-            />
+            >
+              <div className={styles.seekTrack}>
+                {bufferedRanges.map((range, index) => (
+                  <div
+                    key={index}
+                    className={styles.seekBuffer}
+                    style={{
+                      left: `${(range.start / (duration || 1)) * 100}%`,
+                      width: `${((range.end - range.start) / (duration || 1)) * 100}%`,
+                    }}
+                  />
+                ))}
+                <div
+                  className={styles.seekPlayed}
+                  style={{ width: `${playedFraction * 100}%` }}
+                />
+              </div>
+              <div
+                className={styles.seekThumb}
+                style={{ left: `${playedFraction * 100}%` }}
+              />
+              {hoverSec !== null && (
+                <div
+                  className={styles.seekTooltip}
+                  style={{ left: `${(hoverSec / (duration || 1)) * 100}%` }}
+                >
+                  {formatTime(hoverSec)}
+                </div>
+              )}
+            </div>
             <span className={styles.time}>
               {formatTime(current)} / {formatTime(duration)}
             </span>
@@ -715,7 +1207,13 @@ const CustomPlayer = ({
 
             <button
               className={styles.iconBtn}
-              onClick={() => setMuted((prev) => !prev)}
+              onClick={() => {
+                if (muted) {
+                  unmuteRef.current();
+                } else {
+                  setMuted(true);
+                }
+              }}
               aria-label="Mute"
             >
               {muted || volume === 0 ? (
@@ -732,7 +1230,11 @@ const CustomPlayer = ({
               value={muted ? 0 : volume}
               onChange={(e) => {
                 setVolume(Number(e.target.value));
-                setMuted(false);
+                if (muted) {
+                  setMuted(false);
+                  onUnmute?.();
+                }
+                setShowSoundChip(false);
               }}
               className={styles.volume}
               aria-label="Volume"
@@ -838,6 +1340,43 @@ const CustomPlayer = ({
                 )}
               </div>
             )}
+
+            {/* Settings: ambient glow, stats, shortcuts */}
+            <div className={styles.menuWrap}>
+              <button
+                className={styles.iconBtn}
+                onClick={() => setMenu(menu === "settings" ? null : "settings")}
+                aria-label="Settings"
+              >
+                <BsGearFill />
+              </button>
+              {menu === "settings" && (
+                <div className={styles.menu}>
+                  <button
+                    className={ambient ? styles.menuActive : ""}
+                    onClick={() => setAmbient((prev) => !prev)}
+                  >
+                    <BsSunFill /> Ambient glow {ambient ? "on" : "off"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowStats(true);
+                      setMenu(null);
+                    }}
+                  >
+                    <BsGraphUp /> Playback stats
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowShortcuts(true);
+                      setMenu(null);
+                    }}
+                  >
+                    <BsQuestionCircle /> Shortcut hints
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div style={{ flex: 1 }} />
 
