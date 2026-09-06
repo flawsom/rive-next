@@ -32,16 +32,16 @@ const cache = new Map<string, CacheEntry>();
 // known-good. Search runs first; hints are the safety net when the text index
 // returns noise (e.g. fan reuploads of trailers).
 const IDENTIFIER_HINTS: Record<string, string[]> = {
-  // A Trip to the Moon (Le Voyage dans la Lune, 1902) — restored MP4
-  "a trip to the moon": ["LeVoyageDansLaLune"],
-  "le voyage dans la lune": ["LeVoyageDansLaLune"],
-  // Gone with the Wind (1939) — long-standing Feature Films uploads
-  "gone with the wind": ["GoneWithTheWind1939", "gone_with_the_wind_1939"],
-  // Night of the Living Dead (1968) — the canonical public-domain horror
+  // A Trip to the Moon (Le Voyage dans la Lune, 1902) — top-hit identifier.
+  "a trip to the moon": ["ATripToTheMoonGeorgeMelies", "ATripToTheMoon1902"],
+  "le voyage dans la lune": ["ATripToTheMoonGeorgeMelies"],
+  // Gone with the Wind (1939) — full-length 218 MB feature upload.
+  "gone with the wind": ["gone-with-the-wind_202108"],
+  // Night of the Living Dead (1968) — the canonical public-domain horror.
   "night of the living dead": ["night_of_the_living_dead"],
   // Nosferatu (1922)
   nosferatu: ["nosferatuTheVampire", "Nosferatu1922"],
-  // Metropolis (1927) — backup when provider tiers miss
+  // Metropolis (1927) — backup when provider tiers miss.
   metropolis: ["Metropolis1927Film", "metropolis_1927"],
 };
 
@@ -128,13 +128,7 @@ export async function findArchiveStreams(
   const streams: ArchiveStream[] = [];
 
   // 1) Full-text search across archive.org's movie holdings.
-  const q = [
-    `title:("${title}")`,
-    "mediatype:(movies)",
-    year ? `AND year:${year}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const q = [`title:("${title}")`, "mediatype:(movies)"].join(" AND ");
   const search = await timedFetch(
     `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl%5B%5D=identifier&sort%5B%5D=downloads+desc&rows=4&output=json`,
     8_000,
