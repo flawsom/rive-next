@@ -218,6 +218,36 @@ export default async function handler(
   const deadline = Date.now() + 45_000;
   const candidates: StreamCandidate[] = [];
 
+  // ── Archive.org classics fast-path ─────────────────────────────────────
+  // Pre-1945 cinema (A Trip to the Moon, Gone with the Wind, Nosferatu…)
+  // does not exist on ANY piracy-grade provider: every provider tier below
+  // is guaranteed to burn its full time budget and return nothing. So when
+  // the title is clearly a classic (year ≤ 1949), run the archive.org tier
+  // FIRST and skip the provider scrapes entirely — the classics answer in
+  // ~2–4s instead of 45s of futile fetching.
+  const yearParam = Number(req.query.year) || 0;
+  const titleParam =
+    typeof req.query.title === "string" && req.query.title.trim()
+      ? req.query.title.trim().slice(0, 150)
+      : null;
+  const isClassic = yearParam > 0 && yearParam <= 1949;
+  if (isClassic && titleParam && candidates.length === 0) {
+    const archive = await findArchiveStreams(
+      titleParam,
+      yearParam,
+      Date.now() + 20_000,
+    );
+    if (archive.length > 0) {
+      candidates.push(...archive);
+    }
+  }
+  // Guarantee the archive tier a floor even on the non-classic path: the
+  // generic tiers below may eat the whole deadline, so reserve the last 12s
+  // of the 45s window for it and cap the earlier tiers' deadline accordingly.
+  const providerDeadline = isClassic
+    ? deadline
+    : Math.min(deadline, Date.now() + 33_000);
+
   // 0) Universal tier: mint REAL direct HLS streams from the videm player
   // API (the HLS backend of 2Embed's default server). This is what makes
   // the custom player work — the generic HTML scraping below finds nothing
@@ -291,37 +321,29 @@ export default async function handler(
     );
 
     // 3) Manifest-derived API endpoints.
-    if (Date.now() < deadline) {
+    if (Date.now() < providerDeadline) {
       candidates.push(
         ...(await extractFromApis(
           providerId,
           primaryUrl,
-          Math.max(0, deadline - Date.now()),
+          Math.max(0, providerDeadline - Date.now()),
         )),
       );
     }
   }
 
-  // Last-resort tier: archive.org classics. The piracy-grade providers have
-  // no incentive to carry pre-1945 cinema (A Trip to the Moon, Gone with the
-  // Wind, Nosferatu…) but archive.org legally hosts it in full. When every
-  // provider tier came up empty, search archive.org for the title and return
-  // its best mp4 derivative — 1900s cinema plays in the same custom player,
-  // through our proxy, ad-free. TMDB title/year arrive via query params.
-  if (candidates.length === 0) {
-    const title =
-      typeof req.query.title === "string" && req.query.title.trim()
-        ? req.query.title.trim().slice(0, 150)
-        : null;
-    if (title) {
-      const yearNum = Number(req.query.year) || undefined;
-      const archive = await findArchiveStreams(
-        title,
-        yearNum,
-        Math.max(0, deadline - Date.now()),
-      );
-      candidates.push(...archive);
-    }
+  // Last-resort tier: archive.org classics. Runs when every provider tier
+  // came up empty (or the title IS a classic, where it already ran above).
+  // Searches archive.org for the title and returns its best mp4 derivative —
+  // 1900s cinema plays in the same custom player, through our proxy, ad-free.
+  if (candidates.length === 0 && titleParam) {
+    const yearNum = Number(req.query.year) || undefined;
+    const archive = await findArchiveStreams(
+      titleParam,
+      yearNum,
+      Date.now() + 12_000,
+    );
+    candidates.push(...archive);
   }
 
   // Dedupe by URL, prefer HLS (best player support).
