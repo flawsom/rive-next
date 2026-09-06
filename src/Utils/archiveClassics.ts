@@ -82,7 +82,7 @@ function pickBestFile(files: MetadataFile[]): {
   );
   if (mp4s.length === 0) return null;
   const sized = mp4s
-    .map((f) => ({ name: f.name, bytes: Number(f.size) || 0 }))
+    .map((f) => ({ name: f.name as string, bytes: Number(f.size) || 0 }))
     .sort((a, b) => b.bytes - a.bytes);
   // Prefer a substantial feature-length file (>100MB); fall back to the
   // largest available (silent shorts like 1902 are legitimately small).
