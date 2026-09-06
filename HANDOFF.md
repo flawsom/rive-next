@@ -5,6 +5,51 @@
 
 ---
 
+## ⚡ Session 10 — extreme playback matrix (27 titles, 1902→2026) + dubs/subs menus
+
+### Production matrix results (`eaeba4c`, probed live Sept 6 ~11:10 UTC)
+
+`scripts/probe-matrix.js <base-url>` walks 27 curated titles through the real
+production chain (resolve → extract → proxy HEAD). Results against
+https://open-stream-khaki.vercel.app:
+
+| Verdict   | Count     | Meaning                                                                     |
+| --------- | --------- | --------------------------------------------------------------------------- |
+| ✅ DIRECT | **22/27** | real HLS through our proxy → our CustomPlayer, no ads                       |
+| 🟡 EMBED  | 3/27      | universal embed only (Naruto, Vincenzo, Crash Landing on You)               |
+| ❌ FAIL   | 2/27      | no source found anywhere (A Trip to the Moon 1902, Gone with the Wind 1939) |
+
+Era coverage: 1900s-1940s 1/3 · 1950s-1970s 5/5 · 1980s-1990s 4/4 ·
+2000s-2024 **14/14** · 2025-2026 1/1. TV 3/3, anime 2/3 direct, K-drama 1/3
+direct (all 3 K-dramas at least embed-playable). Toxic (1213243, the user's
+canary) is DIRECT.
+
+**Not verifiable server-side:** whether a given videm manifest actually
+contains multi-audio dubs or English subs depends on the upstream ladder —
+the _menus_ now exist (below) and light up when a manifest carries them.
+Actual dub/sub presence must be confirmed by eye in the player.
+
+### Multi-audio (dubs) + subtitle hardening in CustomPlayer
+
+- New **audio-language menu** (music-note icon, appears only when the
+  manifest carries >1 audio track): hls.js `audioTracks` and shaka
+  `getAudioTracks()` both mapped; switching keeps position and works
+  mid-play. Dubs are only selectable when the provider actually muxes them.
+- In-manifest WebVTT subtitle tracks (`SUBTITLE_TRACKS_UPDATED`) now merge
+  into the existing subtitle menu alongside remote/uploaded SRT/VTT;
+  `selectSubtitle` also syncs `hls.subtitleTrack` so native subs render
+  through the HLS pipeline. English subs appear whenever the manifest ships
+  them.
+
+### Session 9 recap (same push family)
+
+DASH via shaka (dynamic import), auto-chapters (scene-cut sampling + seekbar
+markers + thumbnail menu), mini player, telemetry
+(`/api/telemetry/playback` + `GET ?action=summary` — deployed, healthy,
+`{"sessions":0}` until real browser sessions flow). Full notes below.
+
+---
+
 ## ⚡ Session 9 — APEX PRD phase 2: DASH engine, auto-chapters, mini player, telemetry
 
 Implements the slice of the APEX PLAYER PRD that Session 8 deliberately
