@@ -265,11 +265,18 @@ export default async function handler(
       ? req.query.title.trim().slice(0, 150)
       : null;
   const isClassic = yearParam > 0 && yearParam <= 1949;
+  // Episode context for TV: the archive tier must never serve the WRONG
+  // episode — it either finds the exact one or yields to the embed tier.
+  const tvContext =
+    type === "tv"
+      ? { season: season || undefined, episode: episode || undefined }
+      : undefined;
   if (isClassic && titleParam && candidates.length === 0) {
     const archive = await findArchiveStreams(
       titleParam,
       yearParam,
       Date.now() + 20_000,
+      tvContext,
     );
     if (archive.length > 0) {
       candidates.push(...archive);
@@ -372,10 +379,13 @@ export default async function handler(
   // known-good archive.org item, append the hinted mp4 so the client's silent
   // server rotation always has a guaranteed-live candidate behind any dead
   // provider streams. Skipped when an archive candidate is already present
-  // (the classics fast-path) — dedupe would make it a no-op anyway.
+  // (the classics fast-path) — dedupe would make it a no-op anyway. The hint
+  // map is movies-only, so TV titles skip it entirely (an episode-less movie
+  // file is exactly the wrong-content bug this file exists to prevent).
   if (
     titleParam &&
     candidates.length > 0 &&
+    !tvContext &&
     !candidates.some((c) => (c.label || "").startsWith("archive.org"))
   ) {
     candidates.push(...(await getHintedArchiveStreams(titleParam)));
@@ -385,12 +395,14 @@ export default async function handler(
   // came up empty (or the title IS a classic, where it already ran above).
   // Searches archive.org for the title and returns its best mp4 derivative —
   // 1900s cinema plays in the same custom player, through our proxy, ad-free.
+  // TV passes the season/episode so only the exact episode can be returned.
   if (candidates.length === 0 && titleParam) {
     const yearNum = Number(req.query.year) || undefined;
     const archive = await findArchiveStreams(
       titleParam,
       yearNum,
       Date.now() + 12_000,
+      tvContext,
     );
     candidates.push(...archive);
   }

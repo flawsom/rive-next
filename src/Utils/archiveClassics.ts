@@ -76,6 +76,16 @@ interface MetadataFile {
   size?: string;
 }
 
+/** Lowercase, strip separators so "S02E07 - Your_Obedient.Servant" matches. */
+function normName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[_.]+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /** Pick the most complete mp4 derivative from an archive item's file list. */
 function pickBestFile(files: MetadataFile[]): {
   name: string;
@@ -94,8 +104,57 @@ function pickBestFile(files: MetadataFile[]): {
   return feature || sized[0];
 }
 
+/**
+ * Episode-aware file picker for TV searches. Finds the file that actually
+ * matches the requested season/episode (SxxEyy, NxYY, "EP 8", "episode 8"),
+ * rejecting junk (<40MB clips/thumbnails) and the WRONG episode — playing
+ * episode 8 when the user asked for episode 1 is worse than not playing.
+ * Returns null when nothing matches: the caller keeps searching or yields
+ * to the embed tier (status quo), never to wrong content.
+ */
+function pickEpisodeFile(
+  files: MetadataFile[],
+  season: number | undefined,
+  episode: number,
+): { name: string; bytes: number } | null {
+  const mp4s = files.filter(
+    (f) => f.name && /\.(mp4|m4v)$/i.test(f.name) && f.format !== "Thumbnail",
+  );
+  if (mp4s.length === 0) return null;
+  const sized = mp4s
+    .map((f) => ({
+      name: f.name as string,
+      bytes: Number(f.size) || 0,
+      norm: normName(f.name as string),
+    }))
+    .filter((f) => f.bytes === 0 || f.bytes >= 40_000_000); // junk guard
+  const matches = sized.filter((f) => {
+    // s01e02 / 1x02 — exact season+episode pin
+    const sNum = season || 0;
+    if (
+      sNum > 0 &&
+      (new RegExp(`\\bs0*${sNum}\\s*e0*${episode}\\b`).test(f.norm) ||
+        new RegExp(`\\b${sNum}\\s*x\\s*0*${episode}\\b`).test(f.norm))
+    ) {
+      return true;
+    }
+    // ep 2 / episode 2 / e02 — episode number only. Word boundaries keep
+    // "ep 152" from matching episode 2; a pinned DIFFERENT season rejects.
+    if (new RegExp(`\\b(?:ep|episode|e)\\s*0*${episode}\\b`).test(f.norm)) {
+      const seasonPin = f.norm.match(/\b(?:season|series)\s*0*(\d{1,2})\b/);
+      if (seasonPin && sNum > 0 && Number(seasonPin[1]) !== sNum) return false;
+      return true;
+    }
+    return false;
+  });
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => b.bytes - a.bytes);
+  return { name: matches[0].name, bytes: matches[0].bytes };
+}
+
 async function streamsFromIdentifier(
   identifier: string,
+  tv?: { season?: number; episode?: number },
 ): Promise<ArchiveStream[]> {
   const meta = await timedFetch(
     `https://archive.org/metadata/${encodeURIComponent(identifier)}`,
@@ -107,7 +166,12 @@ async function streamsFromIdentifier(
     metadata?: { title?: string };
   } | null;
   const files = body?.files || [];
-  const best = pickBestFile(files);
+  // TV: only an episode-number match counts — the largest file is often the
+  // WRONG episode, which must never be served as "direct".
+  const best =
+    tv && tv.episode
+      ? pickEpisodeFile(files, tv.season, tv.episode)
+      : pickBestFile(files);
   if (!best) return [];
   return [
     {
@@ -153,22 +217,30 @@ export async function getHintedArchiveStreams(
  * @param title  display title (e.g. "A Trip to the Moon")
  * @param year   optional release year to disambiguate remakes
  * @param deadlineMs absolute epoch-ms by which all work must stop
+ * @param tv     for TV titles: the season/episode to match. When set, only
+ *   files whose names pin that exact episode are returned — no match means
+ *   an empty result (the embed tier covers it), never a wrong episode.
  */
 export async function findArchiveStreams(
   title: string,
   year?: number,
   deadlineMs = Date.now() + 20_000,
+  tv?: { season?: number; episode?: number },
 ): Promise<ArchiveStream[]> {
-  const key = `${title.toLowerCase()}|${year || ""}`;
+  const isTv = !!(tv && tv.episode);
+  const key = `${title.toLowerCase()}|${year || ""}|tv${
+    isTv ? `${tv?.season ?? 0}e${tv?.episode}` : ""
+  }`;
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.streams;
 
   const streams: ArchiveStream[] = [];
 
-  // 1) Full-text search across archive.org's movie holdings.
+  // 1) Full-text search across archive.org's movie holdings. TV sweeps more
+  //    rows because episode uploads are scattered across low-download items.
   const q = [`title:("${title}")`, "mediatype:(movies)"].join(" AND ");
   const search = await timedFetch(
-    `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl%5B%5D=identifier&sort%5B%5D=downloads+desc&rows=4&output=json`,
+    `https://archive.org/advancedsearch.php?q=${encodeURIComponent(q)}&fl%5B%5D=identifier&sort%5B%5D=downloads+desc&rows=${isTv ? 8 : 4}&output=json`,
     8_000,
   );
   if (search && Date.now() < deadlineMs) {
@@ -177,7 +249,9 @@ export async function findArchiveStreams(
     } | null;
     for (const doc of body?.response?.docs || []) {
       if (!doc.identifier || Date.now() > deadlineMs) break;
-      streams.push(...(await streamsFromIdentifier(doc.identifier)));
+      streams.push(
+        ...(await streamsFromIdentifier(doc.identifier, isTv ? tv : undefined)),
+      );
       if (streams.length >= 2) break; // top 2 hits are plenty
     }
   }
