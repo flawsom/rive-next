@@ -12,6 +12,8 @@ interface Fetch {
   query?: string;
   season?: number;
   episode?: number;
+  /** TMDB append_to_response (e.g. "aggregate_credits,external_ids") */
+  append_to_response?: string;
 }
 export default async function axiosFetch({
   requestID,
@@ -25,6 +27,7 @@ export default async function axiosFetch({
   query,
   season,
   episode,
+  append_to_response,
 }: Fetch) {
   const request = requestID;
   const API_KEY = process.env.NEXT_PUBLIC_TMDB_API_KEY;
@@ -62,8 +65,8 @@ export default async function axiosFetch({
     searchTv: `${baseURL}/search/tv?query=${query}&language=${language}&page=${page}`,
 
     // for a ID
-    movieData: `${baseURL}/movie/${id}?language=${language}`,
-    tvData: `${baseURL}/tv/${id}?language=${language}`,
+    movieData: `${baseURL}/movie/${id}?language=${language}${append_to_response ? `&append_to_response=${encodeURIComponent(append_to_response)}` : ""}`,
+    tvData: `${baseURL}/tv/${id}?language=${language}${append_to_response ? `&append_to_response=${encodeURIComponent(append_to_response)}` : ""}`,
     personData: `${baseURL}/person/${id}?language=${language}`,
     movieVideos: `${baseURL}/movie/${id}/videos?language=${language}`,
     tvVideos: `${baseURL}/tv/${id}/videos?language=${language}`,

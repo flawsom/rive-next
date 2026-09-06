@@ -23,6 +23,7 @@ import {
   extractCatalogDirectStreams,
   fetchPageSmart,
 } from "@/Utils/fileHostSources";
+import { findArchiveStreams } from "@/Utils/archiveClassics";
 
 export const maxDuration = 55;
 
@@ -298,6 +299,28 @@ export default async function handler(
           Math.max(0, deadline - Date.now()),
         )),
       );
+    }
+  }
+
+  // Last-resort tier: archive.org classics. The piracy-grade providers have
+  // no incentive to carry pre-1945 cinema (A Trip to the Moon, Gone with the
+  // Wind, Nosferatu…) but archive.org legally hosts it in full. When every
+  // provider tier came up empty, search archive.org for the title and return
+  // its best mp4 derivative — 1900s cinema plays in the same custom player,
+  // through our proxy, ad-free. TMDB title/year arrive via query params.
+  if (candidates.length === 0) {
+    const title =
+      typeof req.query.title === "string" && req.query.title.trim()
+        ? req.query.title.trim().slice(0, 150)
+        : null;
+    if (title) {
+      const yearNum = Number(req.query.year) || undefined;
+      const archive = await findArchiveStreams(
+        title,
+        yearNum,
+        Math.max(0, deadline - Date.now()),
+      );
+      candidates.push(...archive);
     }
   }
 

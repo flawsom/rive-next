@@ -641,6 +641,14 @@ const Watch = () => {
     if (season) params.set("season", season);
     if (episode) params.set("episode", episode);
     if (resolvedPage?.url) params.set("pageUrl", resolvedPage.url);
+    const metaTitle = data?.title || data?.name;
+    if (metaTitle) params.set("title", String(metaTitle));
+    if (data?.release_date || data?.first_air_date) {
+      params.set(
+        "year",
+        String(data?.release_date || data?.first_air_date).slice(0, 4),
+      );
+    }
     let applied = false; // a direct stream took over (no switch needed)
     const run = async () => {
       try {
@@ -749,6 +757,7 @@ const Watch = () => {
     streamUrl,
     resolvedPage,
     extractNonce,
+    data, // title/year feed the archive.org classics tier
   ]);
 
   // ─── Direct-stream failure recovery ──────────────────────────────────

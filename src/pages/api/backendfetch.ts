@@ -102,6 +102,12 @@ export default async function handler(
         episode: Number.isFinite(Number(req.query.episode))
           ? Math.max(1, Math.min(10_000, Number(req.query.episode)))
           : undefined,
+        // Detail-page enrichment: only allowlist real TMDB append keys.
+        append_to_response: /^[a-z_,]{0,200}$/i.test(
+          String(req.query.append_to_response || ""),
+        )
+          ? String(req.query.append_to_response).slice(0, 200)
+          : undefined,
       }),
       15_000,
     );

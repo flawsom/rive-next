@@ -40,6 +40,8 @@ const DetailPage = () => {
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [credits, setCredits] = useState<any>(null);
+  const [externalIds, setExternalIds] = useState<any>(null);
   const [user, setUser] = useState<any>();
 
   // Close the trailer modal on Escape; cleanup the key listener.
@@ -118,6 +120,11 @@ const DetailPage = () => {
           requestID: `${rawType}Data`,
           id: rawId,
           language: "en-US",
+          // One round-trip pulls the full detail envelope: aggregate credits
+          // (with voice-actor roles for animation), created_by (show
+          // creators), content ratings, keywords and external ids.
+          append_to_response:
+            "aggregate_credits,credits,external_ids,content_ratings,release_dates,keywords",
         });
         if (data && data.success !== false) break;
         if (data && data.success === false) break; // definitive 404 from TMDB
@@ -139,6 +146,10 @@ const DetailPage = () => {
       }
       setData(data);
       setLoading(false);
+      // Aggregate credits = every actor incl. animated/voice roles with their
+      // characters; created_by surfaces the show creator on the overview.
+      setCredits(data?.aggregate_credits || data?.credits || null);
+      setExternalIds(data?.external_ids || null);
 
       // ── Enrichment: independent, failure-tolerant ──
       try {
@@ -393,7 +404,13 @@ const DetailPage = () => {
             cast={data?.credits?.cast?.slice(0, 10).map((c: any) => c.name)}
           />
         ) : null}
-        <MetaDetails id={id} type={type} data={data} />
+        <MetaDetails
+          id={id}
+          type={type}
+          data={data}
+          credits={credits}
+          externalIds={externalIds}
+        />
       </div>
 
       {trailerOpen && trailer?.key && (

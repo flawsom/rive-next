@@ -19,7 +19,7 @@ function capitalizeFirstLetter(string: string) {
 }
 
 const dummyList = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-const MetaDetails = ({ id, type, data }: any) => {
+const MetaDetails = ({ id, type, data, credits, externalIds }: any) => {
   const [category, setCategory] = useState<any>("overview"); // latest, trending, topRated
   const [categoryData, setCategoryData] = useState<any>();
   const [imageLoading, setImageLoading] = useState<any>(true);
@@ -49,6 +49,28 @@ const MetaDetails = ({ id, type, data }: any) => {
   data?.production_companies?.map((ele: any) => {
     production_companies.push(ele.name);
   });
+  // Aggregate credits carry every performer including animated/voice roles
+  // (character + order). Fall back to classic credits, then the credits
+  // already embedded in the detail envelope (append_to_response).
+  const castList: any[] =
+    credits?.cast?.length > 0
+      ? credits.cast
+      : data?.aggregate_credits?.cast?.length > 0
+        ? data.aggregate_credits.cast
+        : data?.credits?.cast || [];
+  const crewList: any[] =
+    credits?.crew?.length > 0
+      ? credits.crew
+      : data?.aggregate_credits?.crew?.length > 0
+        ? data.aggregate_credits.crew
+        : data?.credits?.crew || [];
+  // Show creators (TV) and lead actors for the overview block.
+  const creators: string[] = (data?.created_by || []).map((c: any) => c?.name);
+  const topCast: string[] = castList.slice(0, 5).map((c: any) => c?.name);
+  const directors: string[] = crewList
+    .filter((c: any) => c?.job === "Director")
+    .slice(0, 3)
+    .map((c: any) => c?.name);
   const release_date = new Date(data?.release_date || data?.first_air_date);
   const end_date = new Date(data?.last_air_date);
   const birthday = new Date(data?.birthday);
@@ -317,6 +339,20 @@ const MetaDetails = ({ id, type, data }: any) => {
                 </h4>
               ) : null}
               <p>{data?.overview}</p>
+              {(creators?.length > 0 || directors?.length > 0) && (
+                <>
+                  <h3>{creators?.length > 0 ? "Created By" : "Director"}</h3>
+                  <p>
+                    {(creators?.length > 0 ? creators : directors)?.join(", ")}
+                  </p>
+                </>
+              )}
+              {topCast?.length > 0 && (
+                <>
+                  <h3>Starring</h3>
+                  <p>{topCast?.join(", ")}</p>
+                </>
+              )}
               {release_date.getDate() ? (
                 <>
                   <h3>Release</h3>
@@ -433,8 +469,51 @@ const MetaDetails = ({ id, type, data }: any) => {
           <div className={styles.casts}>
             {category === "casts" && (
               <>
-                <h4 className={styles.header}>Cast</h4>
-                {categoryData?.cast?.map((ele: any) => (
+                {externalIds && (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.75rem",
+                      flexWrap: "wrap",
+                      marginBottom: "0.75rem",
+                    }}
+                  >
+                    {externalIds?.imdb_id && (
+                      <a
+                        className={styles.links}
+                        href={`https://www.imdb.com/title/${externalIds.imdb_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        IMDb
+                      </a>
+                    )}
+                    {externalIds?.instagram_id && (
+                      <a
+                        className={styles.links}
+                        href={`https://www.instagram.com/${externalIds.instagram_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Instagram
+                      </a>
+                    )}
+                    {externalIds?.twitter_id && (
+                      <a
+                        className={styles.links}
+                        href={`https://twitter.com/${externalIds.twitter_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        X / Twitter
+                      </a>
+                    )}
+                  </div>
+                )}
+                <h4 className={styles.header}>
+                  Cast{castList?.length > 20 ? " & Voice Cast" : ""}
+                </h4>
+                {castList?.slice(0, 60)?.map((ele: any) => (
                   <div className={styles.cast}>
                     <Link
                       href={`/person?id=${ele?.id}`}
@@ -493,7 +572,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                   </div>
                 ))}
                 {category === "casts" &&
-                  categoryData === undefined &&
+                  castList?.length === 0 &&
                   dummyList.map((ele) => (
                     <div className={styles.cast}>
                       <Skeleton height={100} width={100} />
@@ -501,7 +580,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                     </div>
                   ))}
                 <h4 className={styles.header}>Crew</h4>
-                {categoryData?.crew?.map((ele: any) => (
+                {crewList?.slice(0, 40)?.map((ele: any) => (
                   <div className={styles.cast}>
                     <Link
                       href={`/person?id=${ele?.id}`}
@@ -560,7 +639,7 @@ const MetaDetails = ({ id, type, data }: any) => {
                   </div>
                 ))}
                 {category === "casts" &&
-                  categoryData === undefined &&
+                  crewList?.length === 0 &&
                   dummyList.map((ele) => (
                     <div className={styles.cast}>
                       <Skeleton height={100} width={100} />
