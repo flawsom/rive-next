@@ -18,6 +18,8 @@ interface ArchiveStream {
   kind: string; // "mp4"
   source: "api";
   label: string;
+  /** File size in bytes (0 unknown) — used to rank full features above clips */
+  bytes: number;
 }
 
 interface CacheEntry {
@@ -71,7 +73,10 @@ interface MetadataFile {
 }
 
 /** Pick the most complete mp4 derivative from an archive item's file list. */
-function pickBestFile(files: MetadataFile[]): string | null {
+function pickBestFile(files: MetadataFile[]): {
+  name: string;
+  bytes: number;
+} | null {
   const mp4s = files.filter(
     (f) => f.name && /\.(mp4|m4v)$/i.test(f.name) && f.format !== "Thumbnail",
   );
@@ -82,7 +87,7 @@ function pickBestFile(files: MetadataFile[]): string | null {
   // Prefer a substantial feature-length file (>100MB); fall back to the
   // largest available (silent shorts like 1902 are legitimately small).
   const feature = sized.find((f) => f.bytes >= 100_000_000);
-  return (feature || sized[0]).name!;
+  return feature || sized[0];
 }
 
 async function streamsFromIdentifier(
@@ -102,10 +107,11 @@ async function streamsFromIdentifier(
   if (!best) return [];
   return [
     {
-      url: `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(best)}`,
+      url: `https://archive.org/download/${encodeURIComponent(identifier)}/${encodeURIComponent(best.name)}`,
       kind: "mp4",
       source: "api",
       label: `archive.org · ${identifier}`,
+      bytes: best.bytes,
     },
   ];
 }
@@ -153,6 +159,11 @@ export async function findArchiveStreams(
     streams.push(...(await streamsFromIdentifier(hint)));
   }
 
-  cache.set(key, { expires: Date.now() + CACHE_TTL, streams });
+  cache.set(key, {
+    expires: Date.now() + CACHE_TTL,
+    // Rank full features above short clips/promos: a 10MB trailer must not
+    // outrank the 218MB feature when the player tries candidates in order.
+    streams: [...streams].sort((a, b) => b.bytes - a.bytes),
+  });
   return streams;
 }

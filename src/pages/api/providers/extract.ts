@@ -346,7 +346,9 @@ export default async function handler(
     candidates.push(...archive);
   }
 
-  // Dedupe by URL, prefer HLS (best player support).
+  // Dedupe by URL, prefer HLS (best player support). Archive candidates
+  // interleave by file size so the largest mp4 is tried first — a 10MB clip
+  // must not outrank the 218MB feature.
   const seen = new Set<string>();
   const unique = candidates
     .filter((c) => {
@@ -356,7 +358,10 @@ export default async function handler(
     })
     .sort((a, b) => {
       const rank = (k: string) => (k === "hls" ? 0 : k === "mp4" ? 1 : 2);
-      return rank(a.kind) - rank(b.kind);
+      if (rank(a.kind) !== rank(b.kind)) return rank(a.kind) - rank(b.kind);
+      const as = (a as StreamCandidate & { bytes?: number }).bytes || 0;
+      const bs = (b as StreamCandidate & { bytes?: number }).bytes || 0;
+      return bs - as;
     })
     .slice(0, 15);
 
