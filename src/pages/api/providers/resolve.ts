@@ -25,6 +25,7 @@ import {
   buildEmbedUrl,
   type Provider,
 } from "@/Utils/providers";
+import { fetchPageSmart } from "@/Utils/fileHostSources";
 
 export const maxDuration = 30;
 
@@ -88,6 +89,16 @@ function looksLikeNotFound(html: string): boolean {
     /404\s*(not found|error)?<\/title>/.test(head) ||
     /<title>[^<]*404[^<]*<\/title>/.test(head)
   );
+}
+
+// ─── CF-smart page fetch ────────────────────────────────────────────────
+// Catalog domains challenge-hang datacenter IPs (hdhub4u.tv/.bi verified
+// live Sept 6: 403 challenge on GET, infinite loop on post pages). Direct
+// fetch first; on a challenge/blocked/failed response, retry once through
+// the keyless reader proxy, which renders the page through Cloudflare and
+// returns the real HTML. Null ⇒ genuinely unreachable — cache as a miss.
+async function fetchPageForResolve(url: string) {
+  return fetchPageSmart(url);
 }
 
 // ─── Shell / parked-page rejection ───────────────────────────────────────
@@ -624,10 +635,9 @@ export default async function handler(
 
   // 1) Does the naive id-based URL actually exist?
   if (naiveUrl) {
-    const direct = await fetchText(naiveUrl, 7_000);
+    const direct = await fetchPageForResolve(naiveUrl);
     if (
       direct &&
-      direct.status === 200 &&
       !looksLikeNotFound(direct.html) &&
       // WordPress shells answer 200 for ANY id route with an identical
       // homepage — require the page to actually carry the title when known.
@@ -652,17 +662,20 @@ export default async function handler(
   // 2) Title search on the provider site.
   if (searchUrl && title) {
     const tokens = normalizeTitle(title);
-    const searchHtml = await fetchText(searchUrl, 9_000);
-    if (searchHtml && searchHtml.status === 200 && searchHtml.html) {
+    // Catalog search pages sit behind CF WAF rules (verified live: instant
+    // 403 for datacenter IPs) — fetchPageForResolve transparently retries
+    // through the reader proxy.
+    const searchPage = await fetchPageForResolve(searchUrl);
+    if (searchPage?.html) {
+      const searchHtml = { status: 200, html: searchPage.html };
       let candidates = extractCandidates(searchHtml.html, base, tokens, year);
       if (candidates.length === 0 && type === "tv" && season) {
         // Retry: season packs are often titled "<Title> Season N".
         const seasonQuery = `${title} season ${season}`;
-        const alt = await fetchText(
+        const alt = await fetchPageForResolve(
           `${base}/?s=${encodeURIComponent(seasonQuery)}`,
-          8_000,
         );
-        if (alt && alt.status === 200 && alt.html) {
+        if (alt?.html) {
           candidates = extractCandidates(
             alt.html,
             base,
@@ -673,10 +686,9 @@ export default async function handler(
       }
       // Verify the top candidates until one is a real page.
       for (const candidate of candidates) {
-        const page = await fetchText(candidate.url, 7_000);
+        const page = await fetchPageForResolve(candidate.url);
         if (
           page &&
-          page.status === 200 &&
           !looksLikeNotFound(page.html) &&
           !looksLikeShellPage(page.html, page.finalUrl, candidate.url) &&
           pageMentionsTitle(page.html, title, year)
@@ -705,10 +717,9 @@ export default async function handler(
     const domain = new URL(base).hostname;
     const indexed = await searchIndexCandidates(domain, title);
     for (const candidate of indexed) {
-      const page = await fetchText(candidate, 7_000);
+      const page = await fetchPageForResolve(candidate);
       if (
         page &&
-        page.status === 200 &&
         !looksLikeNotFound(page.html) &&
         !looksLikeShellPage(page.html, page.finalUrl, candidate) &&
         pageMentionsTitle(page.html, title, year)

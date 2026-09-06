@@ -1,10 +1,85 @@
-# Open Stream — Agent Handoff (Sept 5, 2026)
+# Open Stream — Agent Handoff (Sept 6, 2026)
 
-> Everything below was verified against live production deploys of `dev`
-> (HEAD `bbe46d9` + the Session-3 tweak at the tip, then Session 4's
-> direct-stream tier), all pushed to `origin/dev`. Vercel auto-deploys.
+> Everything below was verified against live production deploys of `dev`,
+> all pushed to `origin/dev`. Vercel auto-deploys.
 
 ---
+
+## ⚡ Session 7 — refresh-loop fix + catalog direct-file tier (HubCloud/FSL)
+
+### 1) "It keeps on refreshing" — root cause + fix (`watch.tsx`, `CustomPlayer`)
+
+**Root cause:** a direct stream that died MID-PLAY (expired videm token —
+those are short-lived by design) fired `onFail`, which immediately abandoned
+the whole provider and walked the category source list. Every universal
+shares the same videm backend, so the next provider failed identically →
+cascade of "Trying X…" toasts and page reloads = the visible refresh loop.
+
+**Fix — three-step silent recovery before anything visible happens:**
+
+1. **Rotate servers:** the extraction effect now keeps the full candidate
+   list (`extractedCandidates`); `onFail` marks the dead URL and silently
+   HEAD-verifies + switches to another already-extracted server
+   ("Switched stream server" toast, playback continues).
+2. **One fresh re-extract:** if no other server survives, re-extract the
+   SAME source exactly once (`extractNonce`) — new tokens, embed still held
+   back. `CustomPlayer` now carries the last known position across the
+   rotation so playback resumes where it was, not from 0:00.
+3. **Only then** the visible source walk (exactly one pass; Session 6f's
+   `triedProvidersRef` termination still bounds it).
+
+Plus a 1.2s duplicate-fail debounce (players can fire several error events).
+
+### 2) hdhub4u catalog reality (re-probed live Sept 6) + the reader fallback
+
+- `hdhub4u.tv`/`.bi` → CF challenge (403); post pages → challenge loop.
+- `hdhub4u.ms` → **the live domain** (the site's own SEO pages point at
+  it; the handoff's `.com` note is stale) — CF-walled to datacenter IPs.
+- `hdhub.cfd` → homepage 200 and fetchable from Vercel, deep pages hang on
+  a challenge loop; search `?s=` → instant 403 WAF. Unreliable server-side.
+- **New: keyless reader fallback (`fileHostSources.ts` →
+  `fetchPageSmart`)** — direct fetch first; on a challenge/blocked/failed
+  response, one retry through `r.jina.ai` (`X-Return-Format: html`), which
+  renders the page through Cloudflare and returns the real HTML (verified
+  live: 43KB genuine homepage through the `.ms`/`.tv` walls). Wired into
+  `resolve.ts` (naive URL, search, season retry, DDG fallback verify) and
+  `extract.ts` (page sweep). Every reader failure is soft — the universal
+  tier always remains.
+
+### 3) HubCloud/FSL direct-file tier (`fileHostSources.ts`)
+
+The catalog post's value is its **file-host buttons** (HubCloud, FSL,
+GDFlix…), not the page. New extractor: post page (CF-smart fetch) →
+`extractFileHostLinks` (route/host regexes + quality ranking) →
+`probeDirectMedia` Range-probe (bytes=0-1, follows redirects, accepts only
+real `video/*`/mpegurl/octet answers, rejects HTML masquerades) → returns
+the **post-redirect signed file URLs**. Runs in `/api/providers/extract` as
+step 0b for non-universal providers (10-min per-instance cache). Result:
+hubcloud/fsl sources play as direct files in our CustomPlayer — no provider
+embed, no ads, no click-gates.
+
+**Honest limits (verified live):** file-host PAGES usually serve an
+interstitial whose inner routes are JS-built, and serverless can't click.
+The probe+interstitial-walk covers the redirect-to-file class; anything
+deeper needs a browser runtime. The reader proxy is also rate-limited —
+expect occasional misses; every path degrades to the universal tier, never
+to a dead player.
+
+### Production baseline at session start (HEAD `90c3ccd`)
+
+- `resolve` twoembed 1213243 → `ok:true` · `extract` → 1 direct HLS
+  (Server SWH-Hindi) · proxy HEAD → `200 application/x-mpegurl`.
+- Chain is healthy; the fixes above target mid-play death recovery and
+  catalog-tier coverage.
+
+---
+
+## ⚡ Session 6f (Sept 6, `90c3ccd`) — cascade termination
+
+Provider walk could loop forever when every candidate failed. Now bounded:
+a provider is never re-tried within one title session (`triedProvidersRef`),
+and exhausting every provider terminates with "All sources are currently
+unavailable" + the Switch Source panel instead of looping.
 
 ## ⚡ Session 4 — REAL direct-stream playback (the "no streams" fix)
 

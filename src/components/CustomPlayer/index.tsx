@@ -163,6 +163,12 @@ const CustomPlayer = ({
   const lastProgressRef = useRef(0);
   const startSecondsRef = useRef(startSeconds || 0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Resume continuity across stream rotations: when the SAME title's stream
+  // rotates (expired token → next server), the player remounts with a fresh
+  // src. Carry the last reported position so the user doesn't jump back to
+  // the start on every server switch (directRetriedRef recovers the same
+  // source with fresh tokens — position must survive that).
+  const lastPositionRef = useRef(0);
 
   const [playing, setPlaying] = useState(false);
   const [waiting, setWaiting] = useState(true);
@@ -187,7 +193,13 @@ const CustomPlayer = ({
     if (!video) return;
 
     let destroyed = false;
-    startSecondsRef.current = startSeconds || 0;
+    // A rotation for the same title keeps the last known position; a genuinely
+    // new session honors the passed startSeconds.
+    if (startSeconds === 0 && lastPositionRef.current > 5) {
+      startSecondsRef.current = lastPositionRef.current;
+    } else {
+      startSecondsRef.current = startSeconds || 0;
+    }
     setWaiting(true);
 
     const applyStart = () => {
@@ -262,6 +274,7 @@ const CustomPlayer = ({
         lastProgressRef.current = video.currentTime;
         onProgress?.(video.currentTime, video.duration || 0);
       }
+      if (video.currentTime > 0) lastPositionRef.current = video.currentTime;
     });
     video.addEventListener("durationchange", () =>
       setDuration(video.duration || 0),

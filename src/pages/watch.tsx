@@ -367,9 +367,27 @@ const Watch = () => {
   // is held back until extraction finishes and proves there is no direct
   // stream, so our own player + UI is what the user sees, never the embed.
   const [directChecked, setDirectChecked] = useState(true);
+  // ─── Direct-failure recovery (the "keeps refreshing" fix) ────────────
+  // A direct stream that dies MID-PLAY (expired videm token, dead file host)
+  // used to fire onFail → abandon the whole provider → walk every provider
+  // in the category — visibly reloading the page over and over, even though
+  // every universal shares the same backends (they all fail identically).
+  // Recovery order now: rotate to another ALREADY-EXTRACTED server (silent,
+  // instant) → one silent fresh re-extract of the SAME source → only then
+  // the visible source walk. The user never watches a cascade for a
+  // single-server hiccup.
+  const [extractNonce, setExtractNonce] = useState(0);
+  const [extractedCandidates, setExtractedCandidates] = useState<
+    { url: string; kind: string; label?: string }[]
+  >([]);
+  const directRetriedRef = useRef(false); // one silent re-extract per source
+  const failedDirectUrls = useRef<Set<string>>(new Set());
+  const directFailAtRef = useRef(0); // debounce duplicate fail events
   useEffect(() => {
     setStreamOverride(null); // new source/episode → drop any extracted stream
     setDirectChecked(false); // re-run direct-first for the new source
+    directRetriedRef.current = false;
+    failedDirectUrls.current = new Set();
   }, [currentProvider, id, season, episode]);
 
   // ─── Title-based page resolution ────────────────────────────────────────
@@ -607,6 +625,7 @@ const Watch = () => {
     }
     const isUniversal = !!currentProvider.urlPattern;
     if (isUniversal) setDirectChecked(false); // hold the embed back
+    setExtractedCandidates([]); // a fresh extraction replaces the old servers
     let cancelled = false;
     const controller = new AbortController();
     const params = new URLSearchParams({
@@ -625,6 +644,14 @@ const Watch = () => {
         });
         if (!res.ok) return;
         const data = await res.json();
+        // Remember the full candidate list (minus plain-extension URLs, which
+        // need no token rotation) so a MID-PLAY death can silently rotate to
+        // another server instead of restarting the whole source cascade.
+        const all: { url: string; kind: string; label?: string }[] =
+          data.streams || [];
+        setExtractedCandidates(
+          all.filter((c) => !/\.(m3u8|mp4|webm)(\?|$)/i.test(c.url)),
+        );
         for (const candidate of data.streams || []) {
           if (cancelled) return;
           if (candidate.kind !== "hls" && candidate.kind !== "mp4") continue;
@@ -716,7 +743,71 @@ const Watch = () => {
     playbackMode,
     streamUrl,
     resolvedPage,
+    extractNonce,
   ]);
+
+  // ─── Direct-stream failure recovery ──────────────────────────────────
+  // The CustomPlayer's onFail. A dead/expired direct stream is recovered in
+  // three silent steps before anything visible happens: (1) rotate to another
+  // extracted server, (2) re-extract fresh tokens for the same source, (3)
+  // hand the failure to the standard source walk. Every cascade toast the
+  // user reported ("it keeps on refreshing") came from skipping 1 and 2.
+  const handlePlayerFail = useCallback(async () => {
+    const failedUrl = streamOverride;
+    if (!failedUrl) return; // player failed without a stream — nothing to recover
+    if (Date.now() - directFailAtRef.current < 1200) return; // duplicate event
+    directFailAtRef.current = Date.now();
+    failedDirectUrls.current.add(failedUrl);
+
+    // 1) Rotate to another already-extracted, still-verified server.
+    const rest = extractedCandidates.filter(
+      (c) =>
+        !failedDirectUrls.current.has(c.url) &&
+        (c.kind === "hls" || c.kind === "mp4" || c.kind === "webm"),
+    );
+    for (const candidate of rest) {
+      try {
+        const head = await fetch(
+          `/api/proxy/media?url=${encodeURIComponent(candidate.url)}`,
+          { method: "HEAD", cache: "no-store" },
+        );
+        const ct = head.headers.get("content-type") || "";
+        if (head.ok && /video\/|mpegurl|audio\//.test(ct)) {
+          // Cache BEFORE assigning (playback-mode effect re-probes otherwise).
+          directMediaCache.current[candidate.url] = true;
+          setStreamOverride(candidate.url);
+          setIframeError(false);
+          setIframeLoading(false);
+          toast.info("Switched stream server", {
+            description:
+              "The previous stream expired — connected to another server.",
+            duration: 2000,
+            position: "top-center",
+          });
+          return;
+        }
+      } catch {
+        // try the next candidate
+      }
+    }
+
+    // 2) Nothing else held up — one silent fresh extraction (new tokens,
+    //    same source). The embed stays held back; the user just sees the
+    //    player reconnect.
+    if (!directRetriedRef.current) {
+      directRetriedRef.current = true;
+      setStreamOverride(null);
+      setDirectChecked(false);
+      setExtractNonce((v) => v + 1);
+      return;
+    }
+
+    // 3) This source is genuinely dead — the visible pipeline takes over
+    //    (exactly one "Trying X…" walk, not a loop).
+    setStreamOverride(null);
+    setIframeError(true);
+    iframeErrorRef.current?.();
+  }, [extractedCandidates, streamOverride]);
 
   // Resume position for the custom player, from continue-watching progress.
   const resumeSeconds = useMemo(() => {
@@ -1447,10 +1538,7 @@ const Watch = () => {
                 });
               }
             }}
-            onFail={() => {
-              setIframeLoading(true);
-              iframeErrorRef.current?.();
-            }}
+            onFail={handlePlayerFail}
           />
         </div>
       )}

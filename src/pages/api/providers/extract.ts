@@ -19,6 +19,10 @@ import { findProviderById } from "@/Utils/providers";
 import { getOrBuildManifest } from "@/Utils/providerManifest";
 import { getCachedDomain } from "@/Utils/domainDiscovery";
 import { fetchVidemDirect, VIDEM_DIRECT_PROVIDERS } from "@/Utils/videmSources";
+import {
+  extractCatalogDirectStreams,
+  fetchPageSmart,
+} from "@/Utils/fileHostSources";
 
 export const maxDuration = 55;
 
@@ -222,6 +226,23 @@ export default async function handler(
     candidates.push(...videm.streams);
   }
 
+  // 0b) Catalog tier: WordPress-class providers (HDHub4U/MoviesDrive/…).
+  // The watch page hands us the TITLE-RESOLVED post page; its file-host
+  // buttons (HubCloud/FSL/GDFlix) redirect to the real signed media files.
+  // Every URL is Range-probed server-side before it is returned, so the
+  // client only ever sees playable direct files — ad-free, in our own
+  // player, no provider embed in the loop. Universal providers are excluded:
+  // their pageUrl is an embed route, not a catalog post, and probing it
+  // would only add latency to the videm-first path above.
+  if (
+    candidates.length === 0 &&
+    clientPageUrl &&
+    !VIDEM_DIRECT_PROVIDERS.has(providerId)
+  ) {
+    const catalog = await extractCatalogDirectStreams(primaryUrl);
+    candidates.push(...catalog);
+  }
+
   // Legacy HTML/API scraping ONLY when the direct tier found nothing. For
   // universal providers the videm result is authoritative — running the
   // remaining steps anyway added ~10s of serial fetches before the response
@@ -229,8 +250,11 @@ export default async function handler(
   // it), for zero extra coverage: the JS-driven universal players expose
   // nothing to regex scraping (the original count:0 bug).
   if (candidates.length === 0) {
-    // 1) The resolved provider page itself.
-    const html = await fetchPage(primaryUrl, 12_000);
+    // 1) The resolved provider page itself. CF-smart: direct first, then the
+    // keyless reader proxy (r.jina.ai) — catalog domains challenge-hang
+    // datacenter IPs, and the old blind fetch waited out the full timeout.
+    const page = await fetchPageSmart(primaryUrl);
+    const html = page?.html || null;
     if (html) candidates.push(...extractFromHtml(html));
 
     // 2) iframe sources inside the page → fetch those too (common pattern).

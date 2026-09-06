@@ -62,6 +62,11 @@ const REPOS = [
 // anything mounts, so an unreachable seed degrades to auto-switch, never to a
 // dead player.
 const HDHUB4U_SEED_DOMAINS = [
+  // .ms is the live catalog domain as of Sept 6, 2026 (the site's own SEO
+  // pages point at it; CF-walled to datacenter IPs — the resolver's reader
+  // fallback handles that). .tv/.bi remain as alternates; hdhub.cfd is live
+  // but challenge-hangs on deep pages, so it stays last.
+  "hdhub4u.ms",
   "hdhub4u.tv",
   "hdhub4u.bi",
   "new1.hdhub4u.cl",
@@ -70,6 +75,7 @@ const HDHUB4U_SEED_DOMAINS = [
 
 const PROVIDER_DOMAINS: Record<string, string[]> = {
   hdhub4u: [
+    "hdhub4u.ms",
     "hdhub4u.tv",
     "hdhub4u.bi",
     "new1.hdhub4u.cl",
