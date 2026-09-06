@@ -518,6 +518,7 @@ const CustomPlayer = ({
         backBufferLength: 60,
       });
       hlsRef.current = hls;
+      let hlsFatalCount = 0; // bounded in-type recovery, see the ERROR handler
 
       // Rebase EVERY request (master, playlists, segments) through our proxy:
       // relative children already resolve into the proxy path, and this also
@@ -572,10 +573,46 @@ const CustomPlayer = ({
           }));
         }
       });
+      // Type-aware, bounded recovery — the "keeps on retrying" bug fired
+      // onFail on EVERY fatal error, abandoning recoverable streams:
+      //   • mediaError → hls.recoverMediaError() (the documented remedy)
+      //   • transient networkError → one startLoad() retry
+      //   • a fatal-error budget (4) bounds everything; only then onFail
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
+        if (!data.fatal || destroyed) return;
+        hlsFatalCount += 1;
+        if (hlsFatalCount > 4) {
           onFail?.("HLS playback failed");
+          return;
         }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          try {
+            hls.recoverMediaError();
+            return;
+          } catch {
+            onFail?.("HLS media error unrecoverable");
+            return;
+          }
+        }
+        if (
+          data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+          hlsFatalCount <= 2 &&
+          (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR ||
+            data.details === Hls.ErrorDetails.MANIFEST_LOAD_TIMEOUT ||
+            data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR ||
+            data.details === Hls.ErrorDetails.FRAG_LOAD_TIMEOUT)
+        ) {
+          // One graceful reload for a transient network hiccup (e.g. a token
+          // window flapping); hls.js resumes from its buffer position.
+          try {
+            hls.startLoad();
+            return;
+          } catch {
+            onFail?.("HLS network retry failed");
+            return;
+          }
+        }
+        onFail?.(`HLS ${data.details || "error"}`);
       });
       // In-manifest WebVTT subtitles (many providers ship English subs):
       // surface them in the same subtitle menu as uploaded/remote tracks.

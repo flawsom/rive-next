@@ -40,11 +40,15 @@ const IDENTIFIER_HINTS: Record<string, string[]> = {
   // Gone with the Wind (1939) — full-length 218 MB feature upload.
   "gone with the wind": ["gone-with-the-wind_202108"],
   // Night of the Living Dead (1968) — the canonical public-domain horror.
-  "night of the living dead": ["night_of_the_living_dead"],
-  // Nosferatu (1922)
-  nosferatu: ["nosferatuTheVampire", "Nosferatu1922"],
-  // Metropolis (1927) — backup when provider tiers miss.
-  metropolis: ["Metropolis1927Film", "metropolis_1927"],
+  // Both identifiers verified live Sept 6 (full 596/599 MB features).
+  "night of the living dead": [
+    "night_of_the_living_dead_dvd",
+    "NightOfTheLivingDead-MPEG",
+  ],
+  // Nosferatu (1922) — 574 MB feature, verified live Sept 6.
+  nosferatu: ["Nosferatu1922"],
+  // Metropolis (1927) — 737 MB English-version feature, verified live Sept 6.
+  metropolis: ["Metropolis1927EnglishVersion"],
 };
 
 const UA =
@@ -114,6 +118,34 @@ async function streamsFromIdentifier(
       bytes: best.bytes,
     },
   ];
+}
+
+/**
+ * Hint-only variant: resolve marquee classics straight from the curated
+ * identifier map, skipping the full-text search round-trip. Used by the
+ * extraction pipeline as a TRAILING safety net even when the provider tiers
+ * returned candidates — videm tokens are short-lived and can arrive stale,
+ * so a classic with a known-good archive item must never dead-end. The
+ * client's silent server rotation skips the dead candidates in front of it.
+ */
+export async function getHintedArchiveStreams(
+  title: string,
+  deadlineMs = Date.now() + 8_000,
+): Promise<ArchiveStream[]> {
+  const key = `hint|${title.toLowerCase()}`;
+  const hit = cache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.streams;
+
+  const streams: ArchiveStream[] = [];
+  const hintIds = IDENTIFIER_HINTS[title.toLowerCase()] || [];
+  for (const hint of hintIds) {
+    if (streams.length >= 2 || Date.now() > deadlineMs) break;
+    streams.push(...(await streamsFromIdentifier(hint)));
+  }
+  // Rank full features above short clips/promos (same rule as the search path).
+  const ranked = [...streams].sort((a, b) => b.bytes - a.bytes);
+  cache.set(key, { expires: Date.now() + CACHE_TTL, streams: ranked });
+  return ranked;
 }
 
 /**

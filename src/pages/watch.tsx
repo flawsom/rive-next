@@ -388,6 +388,7 @@ const Watch = () => {
   const directRetriedRef = useRef(false); // one silent re-extract per source
   const failedDirectUrls = useRef<Set<string>>(new Set());
   const directFailAtRef = useRef(0); // debounce duplicate fail events
+  const directFailUrlRef = useRef(""); // debounce scope: same URL only
   useEffect(() => {
     setStreamOverride(null); // new source/episode → drop any extracted stream
     setDirectChecked(false); // re-run direct-first for the new source
@@ -657,17 +658,25 @@ const Watch = () => {
         });
         if (!res.ok) return;
         const data = await res.json();
-        // Remember the full candidate list (minus plain-extension URLs, which
-        // need no token rotation) so a MID-PLAY death can silently rotate to
-        // another server instead of restarting the whole source cascade.
+        // Remember the rotation candidates EXCLUDING any URL this session
+        // already saw die (stale-token server, archive dead link) — rotation
+        // must only offer servers that have not already failed for the user.
         const all: { url: string; kind: string; label?: string }[] =
           data.streams || [];
         setExtractedCandidates(
-          all.filter((c) => !/\.(m3u8|mp4|webm)(\?|$)/i.test(c.url)),
+          all.filter(
+            (c) =>
+              !failedDirectUrls.current.has(c.url) &&
+              !/\.(m3u8|mp4|webm)(\?|$)/i.test(c.url),
+          ),
         );
         for (const candidate of data.streams || []) {
           if (cancelled) return;
           if (candidate.kind !== "hls" && candidate.kind !== "mp4") continue;
+          // Never re-assign a URL this session already watched die — videm
+          // re-mints the identical token on re-extract, and re-assigning it
+          // remounts a dead stream (the "keeps on retrying" loop).
+          if (failedDirectUrls.current.has(candidate.url)) continue;
           try {
             const head = await fetch(
               `/api/proxy/media?url=${encodeURIComponent(candidate.url)}`,
@@ -769,8 +778,15 @@ const Watch = () => {
   const handlePlayerFail = useCallback(async () => {
     const failedUrl = streamOverride;
     if (!failedUrl) return; // player failed without a stream — nothing to recover
-    if (Date.now() - directFailAtRef.current < 1200) return; // duplicate event
+    // Debounce duplicate fail events for the SAME URL only (players can fire
+    // several events). A DIFFERENT URL failing must always be handled.
+    if (
+      failedUrl === directFailUrlRef.current &&
+      Date.now() - directFailAtRef.current < 1200
+    )
+      return;
     directFailAtRef.current = Date.now();
+    directFailUrlRef.current = failedUrl;
     failedDirectUrls.current.add(failedUrl);
 
     // 1) Rotate to another already-extracted, still-verified server.
@@ -1257,6 +1273,16 @@ const Watch = () => {
         id: String(id),
         pageUrl: resolvedPage?.url || "",
       });
+      // title/year let the extraction endpoint attach its archive.org
+      // classics fallback — without them a classic download can 404.
+      const metaTitle = data?.title || data?.name;
+      if (metaTitle) p.set("title", String(metaTitle));
+      if (data?.release_date || data?.first_air_date) {
+        p.set(
+          "year",
+          String(data?.release_date || data?.first_air_date).slice(0, 4),
+        );
+      }
       if (season) p.set("season", season);
       if (episode) p.set("episode", episode);
       const res = await fetch(`/api/providers/extract?${p}`);
@@ -1574,6 +1600,14 @@ const Watch = () => {
             className={styles.iframe}
             allowFullScreen
             allow="autoplay; fullscreen; picture-in-picture"
+            // Ad hardening: the sandbox removes the two vectors provider
+            // embeds use to monetize clicks — window.open popup ads (no
+            // allow-popups) and top-level page redirects (no
+            // allow-top-navigation). allow-scripts + allow-forms keep the
+            // click-to-play gates working; allow-same-origin lets the
+            // embed's OWN origin storage work (it is cross-origin to us, so
+            // it can never touch our page's DOM or cookies).
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
             onLoad={handleIframeLoad}
             onError={handleIframeError}
           />

@@ -5,6 +5,101 @@
 
 ---
 
+## ⚡ Session 11 — classics failure root-caused + liveness-ordered extraction
+
+### Post-test addendum (Sept 6, after the user's production re-test)
+
+The user re-tested production and still saw (a) popup/redirect ads on player
+click and (b) `/watch?type=tv&id=46609&season=1&episode=1` "keeps on
+retrying". Root cause: **the Session-11 fixes were never deployed** — they
+were still uncommitted working-tree changes when the user tested, so
+production ran the pre-sandbox embed and the old fail→walk-retry pipeline.
+
+While verifying, the typecheck exposed a **critical regression inside the
+uncommitted Session-11 work**: the CustomPlayer's bounded-recovery edit had
+clobbered the `hls.on(Hls.Events.ERROR, …)` registration — the handler body
+orphaned at effect top-level (`data` undefined, 7 strict-null type errors,
+build-blocking) and fatal HLS errors never routed to `onFail`. Fixed by
+re-wrapping the recovery logic in a proper ERROR registration; typecheck
+passes (`bun tsc -b --noEmit`).
+
+Reproduction of the 46609 report against production APIs:
+
+- TMDB id 46609 = **Upstairs Downstairs (2010 BBC revival)**, S1E1 "The
+  Favourite" (the `episode=1` search hit "Blindspot"-style episode names in
+  an earlier probe — the show title is what the pipeline sends).
+- `resolve` → verified miss (hdhub4u has no page) → old pipeline walked
+  every provider, each re-extracting and re-failing = the visible retry
+  cascade. With the Session-11 tree, extraction returns 2 **live**
+  archive.org mp4s (200 `video/x-m4v` via the media proxy):
+  `upstairs-downstairs-series-2-episodes-1-7-part-1-2000-uk-vhs` (3.07 GB)
+  and `Upstairs_Downstairs` S02E07 — imperfect episode mapping for a 2010
+  series, but a playing stream instead of a retry loop.
+- Deploying this working tree is what ships the sandbox (ad fix) + the
+  liveness-ordered, dead-URL-skipping recovery (retry fix). Both need
+  browser-eyes verification after the push.
+
+### Production re-verification (Sept 6 ~13:00 UTC, live URL)
+
+- **Both Session-10 FAILs are FIXED on production** (`3405717` archive tier
+  deployed and working): A Trip to the Moon (1902) → 3 archive.org mp4s,
+  HEAD `200 video/mp4` in **1.9 s**; Gone with the Wind (1939) → 3/3 mp4s,
+  **4.6 s**. The classics fast-path answers faster than most modern titles.
+- **One new failure found:** Night of the Living Dead (1968) returned
+  **0/2 alive** candidates — stale videm tokens outlived their validity in a
+  warm serverless cache, and the archive last-resort only ran when
+  `candidates.length === 0`, so it never fired.
+- **videm tokens are flaky-windowed** (verified live: the same Toxic token
+  answered 403 `unavailable` directly, then HEAD `200 application/x-mpegurl`
+  through the proxy minutes later). Expect occasional dead tokens; the
+  pipeline below absorbs them.
+
+### Fixes (in working tree — push to deploy)
+
+1. **Hint-backed archive safety net** (`archiveClassics.ts` →
+   `getHintedArchiveStreams` + `extract.ts`): for titles with a known-good
+   archive.org item, the hinted mp4 is appended EVEN when provider tiers
+   returned candidates, so a classic can never dead-end behind stale videm
+   tokens. Skipped when archive candidates already exist (fast-path).
+2. **Liveness-ordered response** (`extract.ts` → `probeAlive`): the first 6
+   deduped candidates are HEAD-probed (proxy-mirroring headers, 5 s cap,
+   transport errors fail OPEN) and live streams float to the front. The
+   client's HEAD-verify-then-assign then hits a live stream on the first try,
+   and the download path (which takes `streams[0]` blind) stops 404ing.
+3. **Stale hint identifiers replaced** with verified-live items (all HEAD
+   200, full features): NOTLD → `night_of_the_living_dead_dvd` (596 MB) +
+   `NightOfTheLivingDead-MPEG` (598 MB); Nosferatu → `Nosferatu1922`
+   (574 MB); Metropolis → `Metropolis1927EnglishVersion` (737 MB).
+4. **Download path sends `title`/`year`** (`watch.tsx`) so classics get the
+   archive fallback there too.
+
+### Local end-to-end evidence (same code, `bun run dev` + real upstreams)
+
+- NOTLD extract → 4 streams (2 videm HLS live + 2 archive mp4 net), first
+  HEAD `200 application/x-mpegurl` via proxy, 15.3 s.
+- Inception extract → 3 videm HLS, first `200` via proxy, 4.1 s — no
+  regression.
+- Typecheck ✅ (`bun tsc -b --noEmit`).
+
+5. **Embed tier made structurally ad-free** (`watch.tsx`): the provider
+   iframe now mounts with
+   `sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"`.
+   This removes BOTH click-ad vectors provider embeds use — `window.open`
+   popup ads (no `allow-popups`) and top-level page redirects (no
+   `allow-top-navigation`/`allow-popups-to-escape-sandbox`) — while keeping
+   the click-to-play gates (`allow-scripts`, `allow-forms`) and the embed's
+   own-origin storage (`allow-same-origin` is safe because the embed is
+   cross-origin to us; it can never touch our DOM/cookies). In-frame banners
+   inside the provider's own page are still possible (that page is theirs);
+   the durable answer for those titles remains more direct-stream coverage.
+
+Still requires **browser eyes** per the golden rule: pixels/time advance on
+`/watch?type=movie&id=10331` (and the canary 1213243) after the push — plus
+one click-test on an embed-only title (e.g. Vincenzo) to confirm no popup /
+redirect fires and the sandboxed player still plays.
+
+---
+
 ## ⚡ Session 10 — extreme playback matrix (27 titles, 1902→2026) + dubs/subs menus
 
 ### Production matrix results (`eaeba4c`, probed live Sept 6 ~11:10 UTC)

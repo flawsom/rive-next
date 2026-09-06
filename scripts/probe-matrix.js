@@ -271,9 +271,11 @@ async function probeTitle(item) {
   }
 
   // Step 2 — direct extraction (videm HLS tier lives here for universals).
+  // Mirror the watch page exactly: it sends title/year so the archive.org
+  // classics tier can fire (pre-1945 cinema exists nowhere else).
   const extractQs = `providerId=twoembed&type=${item.type}&id=${item.id}${
     item.season ? `&season=${item.season}&episode=${item.episode}` : ""
-  }`;
+  }&title=${encodeURIComponent(item.title)}&year=${item.year || ""}`;
   const ex = await getJson(`/api/providers/extract?${extractQs}`, 55_000);
   const streams =
     ex.ok && Array.isArray(ex.body?.streams) ? ex.body.streams : [];

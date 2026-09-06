@@ -23,7 +23,10 @@ import {
   extractCatalogDirectStreams,
   fetchPageSmart,
 } from "@/Utils/fileHostSources";
-import { findArchiveStreams } from "@/Utils/archiveClassics";
+import {
+  findArchiveStreams,
+  getHintedArchiveStreams,
+} from "@/Utils/archiveClassics";
 
 export const maxDuration = 55;
 
@@ -103,6 +106,37 @@ async function fetchPage(
     return await res.text();
   } catch {
     return null;
+  }
+}
+
+/**
+ * HEAD-probe a candidate upstream, mirroring the headers the media proxy
+ * sends (UA + same-origin referer — videm's gateway rejects referer-less
+ * requests). Returns false only on a DEFINITIVE non-OK answer (e.g. videm's
+ * 403 {"error":"unavailable"} for an expired token) or a non-media content
+ * type; transport errors fail OPEN so a flaky probe never demotes a live
+ * stream.
+ */
+async function probeAlive(url: string, timeoutMs = 5_000): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "user-agent": UA, referer: `${new URL(url).origin}/` },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return false;
+    const type = (res.headers.get("content-type") || "").toLowerCase();
+    return (
+      type.includes("mpegurl") ||
+      type.startsWith("video/") ||
+      type.includes("octet-stream")
+    );
+  } catch {
+    return true; // probe itself failed — assume alive, let the player decide
   }
 }
 
@@ -332,6 +366,21 @@ export default async function handler(
     }
   }
 
+  // Hint-backed safety net: even when the provider tiers returned candidates,
+  // videm tokens are short-lived and can arrive stale (verified live — a
+  // marquee classic came back with 2/2 dead HLS URLs). For titles with a
+  // known-good archive.org item, append the hinted mp4 so the client's silent
+  // server rotation always has a guaranteed-live candidate behind any dead
+  // provider streams. Skipped when an archive candidate is already present
+  // (the classics fast-path) — dedupe would make it a no-op anyway.
+  if (
+    titleParam &&
+    candidates.length > 0 &&
+    !candidates.some((c) => (c.label || "").startsWith("archive.org"))
+  ) {
+    candidates.push(...(await getHintedArchiveStreams(titleParam)));
+  }
+
   // Last-resort tier: archive.org classics. Runs when every provider tier
   // came up empty (or the title IS a classic, where it already ran above).
   // Searches archive.org for the title and returns its best mp4 derivative —
@@ -350,7 +399,7 @@ export default async function handler(
   // interleave by file size so the largest mp4 is tried first — a 10MB clip
   // must not outrank the 218MB feature.
   const seen = new Set<string>();
-  const unique = candidates
+  const deduped = candidates
     .filter((c) => {
       if (seen.has(c.url)) return false;
       seen.add(c.url);
@@ -362,8 +411,30 @@ export default async function handler(
       const as = (a as StreamCandidate & { bytes?: number }).bytes || 0;
       const bs = (b as StreamCandidate & { bytes?: number }).bytes || 0;
       return bs - as;
-    })
-    .slice(0, 15);
+    });
+
+  // Liveness pass (bounded): HEAD-probe the front of the list and float LIVE
+  // streams to the top, preserving the kind/size order within each group.
+  // The client HEAD-verifies the first candidate before assigning it, so a
+  // dead URL at position 0 costs a silent-rotation cycle on every cold load —
+  // and the download path takes streams[0] blind. Probes only run when the
+  // time budget allows (they are capped and fail open on transport errors).
+  let ordered = deduped;
+  const ALIVE_PROBE_LIMIT = 6;
+  if (deduped.length > 1 && Date.now() + 6_000 < deadline) {
+    try {
+      const probed = deduped.slice(0, ALIVE_PROBE_LIMIT);
+      const rest = deduped.slice(ALIVE_PROBE_LIMIT);
+      const verdicts = await Promise.all(probed.map((c) => probeAlive(c.url)));
+      const alive = probed.filter((_, i) => verdicts[i]);
+      const dead = probed.filter((_, i) => !verdicts[i]);
+      ordered = [...alive, ...dead, ...rest];
+    } catch {
+      // never let liveness break the response
+    }
+  }
+
+  const unique = ordered.slice(0, 15);
 
   return res.status(200).json({
     provider: providerId,
