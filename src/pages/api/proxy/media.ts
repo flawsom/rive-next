@@ -1,4 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { setPrivateApiHeaders } from "@/Utils/apiValidation";
 
 // Streaming media proxy: lets the custom player play direct media URLs
@@ -62,6 +64,11 @@ export const config = {
     responseLimit: false,
   },
 };
+
+// Long-lived streams: a progressive movie file (multi-GB, Range-requested)
+// stays open for the whole watch session, so the function needs the maximum
+// execution window the platform allows (the plan cap clamps this value).
+export const maxDuration = 300;
 
 export default async function handler(
   req: NextApiRequest,
@@ -127,11 +134,27 @@ export default async function handler(
     const upstreamRange = upstream.headers.get("content-range");
     const acceptRanges = upstream.headers.get("accept-ranges");
     const upstreamLength = upstream.headers.get("content-length");
+    const isPlaylist = /mpegurl|vnd\.apple\.mpegurl/i.test(contentType);
 
     res.status(upstream.status);
     res.setHeader("content-type", contentType);
-    res.setHeader("cache-control", "no-store");
+    // Caching strategy — media bytes are IMMUTABLE per full URL (a rotated
+    // token or new file means a new URL, i.e. a new cache key), so they can
+    // be cached hard: the browser serves back-seeks and revisits from its
+    // own cache (instant seeks), and Vercel's CDN (s-maxage) serves popular
+    // segments without a cold function + upstream hop. Rewritten HLS
+    // playlists stay no-store — they embed rotating signed URLs.
+    res.setHeader(
+      "cache-control",
+      isPlaylist ? "no-store" : "public, max-age=86400, s-maxage=86400",
+    );
     res.setHeader("access-control-allow-origin", "*");
+    // Strong validators let the browser cache partial (206) responses too —
+    // that is what makes backward seeks instant on progressive files.
+    const etag = upstream.headers.get("etag");
+    const lastModified = upstream.headers.get("last-modified");
+    if (etag) res.setHeader("etag", etag);
+    if (lastModified) res.setHeader("last-modified", lastModified);
     if (upstreamRange) res.setHeader("content-range", upstreamRange);
     if (acceptRanges) res.setHeader("accept-ranges", acceptRanges);
     if (upstreamLength) res.setHeader("content-length", upstreamLength);
@@ -172,23 +195,25 @@ export default async function handler(
       return res.end(rewritten);
     }
 
-    const reader = upstream.body?.getReader();
-    if (!reader) return res.status(502).end();
+    const body = upstream.body;
+    if (!body) return res.end();
 
-    req.on("close", () => controller?.abort());
-    const pump = async () => {
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) res.write(value);
-        }
-        res.end();
-      } catch {
-        res.end();
-      }
+    // Stream with REAL backpressure: pipeline() pauses the upstream read
+    // whenever the client socket is slow. The old manual read/write loop
+    // ignored res.write()'s backpressure signal and buffered the response
+    // in function memory on slow clients — memory pressure stalls and
+    // OOM-killed streams are exactly the "keeps buffering" symptom.
+    const nodeStream = Readable.fromWeb(body as any);
+    const onClientGone = () => {
+      controller.abort();
+      nodeStream.destroy();
     };
-    await pump();
+    req.on("close", onClientGone);
+    try {
+      await pipeline(nodeStream, res);
+    } finally {
+      req.off("close", onClientGone);
+    }
   } catch {
     if (!res.headersSent) {
       return res.status(502).json({ error: "Upstream unavailable" });

@@ -446,9 +446,11 @@ const CustomPlayer = ({
           };
           player.configure({
             streaming: {
-              bufferingGoal: 30,
+              // 60s buffering goal: enough runway that a slow proxied
+              // segment never catches the playhead mid-movie.
+              bufferingGoal: 60,
               rebufferingGoal: 1,
-              retryParameters: { maxAttempts: 3 },
+              retryParameters: { maxAttempts: 4, baseDelay: 250 },
             },
           });
           player.addEventListener?.("error", (event: Event) =>
@@ -514,8 +516,16 @@ const CustomPlayer = ({
         });
     } else if (isHlsUrl(src) && Hls.isSupported()) {
       const hls = new Hls({
-        maxBufferLength: 30,
-        backBufferLength: 60,
+        // Buffer runway for a proxied upstream: 60s ahead with a 96MB
+        // ceiling (more seconds of HD buffered than hls.js defaults), and
+        // 90s of back-buffer — seeks inside either window are instant and
+        // short network hiccups never reach the viewer as a stall.
+        maxBufferLength: 60,
+        maxBufferSize: 96_000_000,
+        backBufferLength: 90,
+        // Open above the lowest rung: measured bandwidth replaces this
+        // estimate within a couple of fragments.
+        abrEwmaDefaultEstimate: 1_500_000,
       });
       hlsRef.current = hls;
       let hlsFatalCount = 0; // bounded in-type recovery, see the ERROR handler
@@ -1160,7 +1170,32 @@ const CustomPlayer = ({
 
   const changeQuality = (levelId: number) => {
     if (hlsRef.current) {
-      hlsRef.current.currentLevel = levelId;
+      if (levelId < 0) {
+        // Auto: hand control back to ABR.
+        hlsRef.current.currentLevel = -1;
+      } else {
+        // Manual selection must hold AND not stall: nextLevel switches at
+        // the next fragment boundary without flushing the buffer, so
+        // playback continues seamlessly on the current quality until the
+        // new level's first segment is buffered. The choice stays pinned
+        // (setting a level disables ABR) — exactly what the user picked.
+        hlsRef.current.nextLevel = levelId;
+      }
+      setCurrentLevel(levelId);
+    }
+    const player = shakaRef.current as any;
+    if (player) {
+      if (levelId < 0) {
+        // Auto: re-enable shaka ABR.
+        player.configure?.({ abr: { enabled: true } });
+      } else {
+        // Switch to the chosen variant without clearing buffers — seamless
+        // mid-play quality change (clearing buffers causes a stall).
+        const track = (player.getVariantTracks?.() || []).find(
+          (t: any) => t.id === levelId,
+        );
+        if (track) player.selectVariantTrack?.(track, false);
+      }
       setCurrentLevel(levelId);
     }
     setMenu(null);
