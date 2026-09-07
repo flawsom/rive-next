@@ -736,6 +736,40 @@ source-failure pipeline (Switch Source), never into an iframe src.
 Confirmed live in the deployed bundle + full chain smoke test (extract 2.5s,
 proxy HEAD 200 `application/x-mpegurl`).
 
+### Session 12 (Sept 7, `9162d2d`..`537fa53`) — universal playback + validation + consumer e2e
+
+Three user-visible fixes, each verified against production:
+
+1. **Direct-first archive.org playback** (`9162d2d`): progressive multi-GB
+   files no longer relay through a serverless function (execution-window cap
+   - two extra network legs = the endless-spinner report). The player mounts
+     archive.org natively with an 8s watchdog + error fallback to the proxy,
+     position preserved; verified archive candidates skip the client HEAD.
+2. **Universal candidate validation** (`12b9dcb`, `537fa53`): extraction
+   used to return candidates that PLAY but are WRONG — a 6MB "5.1 Surround
+   Sound Test" for any title, mislabeled uploads, a 164MB slideshow rip.
+   Because they stream fine, no fallback ever triggered. One shared gate
+   (`src/Utils/candidateValidation.ts`) now runs for every tier: junk-name
+   blocklist, title-token relevance (collapsed-form matching so "spiderman"
+   matches "Spider-Man"), year disambiguation (Barbie 2023 ≠ Rapunzel 2002),
+   and a watchable-bitrate floor (bytes ÷ TMDB runtime, which the watch page
+   now sends). **videm-minted streams are exempt** — tagged `minted` at the
+   source; the first pass rejected them (labels carry no title text) and
+   silently killed the universal tier. The archive picker no longer prefers
+   unsized files, and the provider walk tries the universal tier before the
+   alphabetical catalog list.
+3. **Consumer e2e runner** (`scripts/e2e-matrix.js`): 24 titles across
+   movies/TV/anime/K-drama walk the real chain (best-pick → universal-first
+   extract → sanity → proxy probe). Latest run: **22/24 DIRECT, 1 throttle,
+   1 embed, 0 fail**. videm 403s under a 24-title burst are per-IP mint
+   throttling (one fresh mint + a pause plays fine — real sessions re-mint
+   silently), classified 🟠 not ❌.
+
+Known residuals: videm's play-mint API throttles per server IP under
+concurrent load (rotation handles it per session); titles with no upstream
+source anywhere (e.g. Crash Landing on You in the last run) land on the
+sandboxed provider embed — the honest last resort.
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
