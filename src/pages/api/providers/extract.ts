@@ -19,6 +19,7 @@ import { findProviderById } from "@/Utils/providers";
 import { getOrBuildManifest } from "@/Utils/providerManifest";
 import { getCachedDomain } from "@/Utils/domainDiscovery";
 import { fetchVidemDirect, VIDEM_DIRECT_PROVIDERS } from "@/Utils/videmSources";
+import { fetchVidlinkDirect } from "@/Utils/vidlinkSources";
 import { validateCandidates } from "@/Utils/candidateValidation";
 import {
   extractCatalogDirectStreams,
@@ -68,10 +69,15 @@ interface StreamCandidate {
    *  quality labels — dominates the kind/bytes order when present. */
   rank?: number;
   /** Minted per-title from the provider's own id-resolved player state
-   *  (videm tier). Exempt from universal candidate validation: there is no
-   *  title text or byte count to check, and a wrong-title mint cannot
-   *  happen — the id IS the resolution key. */
+   *  (videm/vidlink tiers). Exempt from universal candidate validation:
+   *  there is no title text or byte count to check, and a wrong-title mint
+   *  cannot happen — the id IS the resolution key. */
   minted?: boolean;
+  /** The upstream only serves browser IPs (Cloudflare gates datacenter
+   *  ranges with 403), so server-side liveness HEADs would falsely kill a
+   *  perfectly playable stream. The client mounts these browser-direct
+   *  and skips its own proxy HEAD too (vidlink tier). */
+  noServerProbe?: boolean;
 }
 
 const MEDIA_URL_RE =
@@ -309,8 +315,15 @@ export default async function handler(
   // the custom player work — the generic HTML scraping below finds nothing
   // on these JS-driven players.
   if (VIDEM_DIRECT_PROVIDERS.has(providerId)) {
-    const videm = await fetchVidemDirect(type, id, season, episode);
+    // videm (HLS ladders) and vidlink (mp4 vault) mint in parallel — each
+    // covers titles the other lacks, and serial minting doubled the wait on
+    // exactly the obscure titles where both matter most.
+    const [videm, vidlink] = await Promise.all([
+      fetchVidemDirect(type, id, season, episode),
+      fetchVidlinkDirect(type, id, season, episode),
+    ]);
     candidates.push(...videm.streams.map((s) => ({ ...s, minted: true })));
+    candidates.push(...vidlink.streams.map((s) => ({ ...s, minted: true })));
   }
 
   // 0b) Catalog tier: WordPress-class providers (HDHub4U/MoviesDrive/…).
@@ -337,6 +350,14 @@ export default async function handler(
   // it), for zero extra coverage: the JS-driven universal players expose
   // nothing to regex scraping (the original count:0 bug).
   if (candidates.length === 0) {
+    // 0c) Catalog session with nothing anywhere: the vidlink vault is
+    // id-routed, so it can still save titles its catalog provider can't
+    // reach (this rescued the embed-only Hanuman Ansh report).
+    if (!VIDEM_DIRECT_PROVIDERS.has(providerId)) {
+      const vidlink = await fetchVidlinkDirect(type, id, season, episode);
+      candidates.push(...vidlink.streams.map((s) => ({ ...s, minted: true })));
+    }
+
     // 1) The resolved provider page itself. CF-smart: direct first, then the
     // keyless reader proxy (r.jina.ai) — catalog domains challenge-hang
     // datacenter IPs, and the old blind fetch waited out the full timeout.
@@ -488,7 +509,15 @@ export default async function handler(
     try {
       const probed = deduped.slice(0, ALIVE_PROBE_LIMIT);
       const rest = deduped.slice(ALIVE_PROBE_LIMIT);
-      const verdicts = await Promise.all(probed.map((c) => probeAlive(c.url)));
+      // Cloudflare-gated upstreams (vidlink vault) answer 403 to every
+      // datacenter probe while playing perfectly in the browser — count
+      // them alive without probing and let the client's browser-side
+      // verification decide.
+      const verdicts = await Promise.all(
+        probed.map((c) =>
+          c.noServerProbe ? Promise.resolve(true) : probeAlive(c.url),
+        ),
+      );
       const alive = probed.filter((_, i) => verdicts[i]);
       const dead = probed.filter((_, i) => !verdicts[i]);
       // A DEFINITIVELY dead probe (403/404 JSON from a removed item, an

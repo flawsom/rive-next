@@ -63,6 +63,12 @@ const proxiedPath = (url: string) =>
 const isDirectFileHost = (url: string) => {
   try {
     const u = new URL(url);
+    // VidLink vault relay: Cloudflare blocks datacenter IPs (the serverless
+    // media proxy gets 403), residential browsers pass — and the mint marks
+    // these cors-allowed. The browser MUST fetch these directly.
+    if (/(?:^|\.)mooncase\.online$/i.test(u.hostname)) {
+      return /\.mp4(\?|$)/i.test(u.pathname);
+    }
     if (!/^(?:[a-z0-9-]+\.)*archive\.org$/i.test(u.hostname)) return false;
     if (!/\.(mp4|webm)(\?|$)/i.test(u.pathname)) return false;
     // Defense in depth: a `.mkv.mp4` rename passes the extension check but

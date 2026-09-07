@@ -714,10 +714,15 @@ const Watch = () => {
           // archive.org files were range-verified server-side during
           // extraction and the player mounts them DIRECTLY in the browser
           // (no proxy hop) — skip the redundant HEAD so a verified file
-          // mounts the moment extraction lands.
+          // mounts the moment extraction lands. Same for VidLink vault
+          // files: their Cloudflare-gated relay 403s every datacenter
+          // request, so a server-side HEAD (ours or via the media proxy)
+          // would kill a stream the browser plays fine. Mount directly;
+          // the browser's own fetch is the verification.
           if (
             /\.(mp4|webm)(\?|$)/i.test(candidate.url) &&
-            /(^|\.)archive\.org\//i.test(candidate.url)
+            (/(^|\.)archive\.org\//i.test(candidate.url) ||
+              /(^|\.)mooncase\.online\//i.test(candidate.url))
           ) {
             if (cancelled) return;
             applied = true;
