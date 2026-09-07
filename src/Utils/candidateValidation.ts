@@ -30,6 +30,9 @@ export interface ValidationContext {
   title: string;
   /** TMDB runtime in minutes (movie runtime, or episode run time for TV). */
   runtimeMinutes?: number;
+  /** Release year — disambiguates same-franchise wrong entries (requesting
+   *  Barbie (2023) must not serve "Barbie as Rapunzel (2002)"). */
+  year?: number;
   /** TV episodes get a lower floor than features (shorter, not junkier). */
   isTv?: boolean;
 }
@@ -147,7 +150,17 @@ export function isCandidateValid(
     return false;
   }
 
-  // 3) Size floor by runtime (only when the size is known).
+  // 3) Year disambiguation: when the label pins a DIFFERENT release year
+  // and never mentions the requested one, it is a different cut/entry of
+  // the franchise (or a namesake). Labels with no year at all are fine.
+  if (ctx.year && ctx.year >= 1900) {
+    const years = haystack.match(/\b(?:19|20)\d{2}\b/g);
+    if (years && years.length > 0 && !years.includes(String(ctx.year))) {
+      return false;
+    }
+  }
+
+  // 4) Size floor by runtime (only when the size is known).
   if (candidate.bytes && candidate.bytes > 0) {
     if (candidate.bytes < minBytesFor(ctx)) return false;
   }

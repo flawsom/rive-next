@@ -67,6 +67,11 @@ interface StreamCandidate {
   /** Catalog quality rank (2160p > 1080p > 720p …) from the post's own
    *  quality labels — dominates the kind/bytes order when present. */
   rank?: number;
+  /** Minted per-title from the provider's own id-resolved player state
+   *  (videm tier). Exempt from universal candidate validation: there is no
+   *  title text or byte count to check, and a wrong-title mint cannot
+   *  happen — the id IS the resolution key. */
+  minted?: boolean;
 }
 
 const MEDIA_URL_RE =
@@ -305,7 +310,7 @@ export default async function handler(
   // on these JS-driven players.
   if (VIDEM_DIRECT_PROVIDERS.has(providerId)) {
     const videm = await fetchVidemDirect(type, id, season, episode);
-    candidates.push(...videm.streams);
+    candidates.push(...videm.streams.map((s) => ({ ...s, minted: true })));
   }
 
   // 0b) Catalog tier: WordPress-class providers (HDHub4U/MoviesDrive/…).
@@ -428,13 +433,22 @@ export default async function handler(
   // is exempt: minted per-title from the provider's id-resolved player
   // state, with ABR ladders and no byte/title heuristics to check.
   if (titleParam) {
-    const validated = validateCandidates(candidates, {
-      title: titleParam,
-      runtimeMinutes: runtimeMin,
-      isTv: type === "tv",
-    });
+    // Minted videm streams bypass the gate (see the minted field docs) —
+    // their labels ("Server VNE") and relay URLs carry no title text, and
+    // rejecting them here killed the whole universal tier whenever a title
+    // was supplied (i.e. always, from the watch page).
+    const minted = candidates.filter((c) => c.minted);
+    const validated = validateCandidates(
+      candidates.filter((c) => !c.minted),
+      {
+        title: titleParam,
+        runtimeMinutes: runtimeMin,
+        year: yearParam || undefined,
+        isTv: type === "tv",
+      },
+    );
     candidates.length = 0;
-    candidates.push(...validated);
+    candidates.push(...minted, ...validated);
   }
 
   // Dedupe by URL, then order for the player:

@@ -255,30 +255,35 @@ async function jfetch(url, timeoutMs = EXTRACT_TIMEOUT_MS) {
     return null;
   }
 }
-
 function sanityCheck(stream, entry) {
   if (!stream) return { ok: false, reason: "no candidate" };
   const label = String(stream.label || "");
   const hay = norm(`${label} ${stream.url}`);
   if (JUNK_RE.test(hay))
     return { ok: false, reason: `junk name: ${label.slice(0, 60)}` };
-  const toks = tokens(entry.title);
-  const collapsed = hay.replace(/ /g, "");
-  if (
-    toks.length &&
-    !toks.every((t) => hay.includes(t) || collapsed.includes(t))
-  ) {
-    return { ok: false, reason: `off-title: ${label.slice(0, 60)}` };
-  }
-  if (
-    stream.bytes &&
-    stream.bytes > 0 &&
-    stream.bytes < minBytes(entry.runtime, entry.type === "tv")
-  ) {
-    return {
-      ok: false,
-      reason: `sub-watchable: ${(stream.bytes / 1e6).toFixed(0)}MB for ${entry.runtime || "?"}min`,
-    };
+  // Minted universal-tier HLS (videm relays) carries no title text and no
+  // byte count — the provider resolved the id upstream. Skip title/size,
+  // same exemption as the server-side gate.
+  const minted = stream.kind === "hls" && !stream.bytes;
+  if (!minted) {
+    const toks = tokens(entry.title);
+    const collapsed = hay.replace(/ /g, "");
+    if (
+      toks.length &&
+      !toks.every((t) => hay.includes(t) || collapsed.includes(t))
+    ) {
+      return { ok: false, reason: `off-title: ${label.slice(0, 60)}` };
+    }
+    if (
+      stream.bytes &&
+      stream.bytes > 0 &&
+      stream.bytes < minBytes(entry.runtime, entry.type === "tv")
+    ) {
+      return {
+        ok: false,
+        reason: `sub-watchable: ${(stream.bytes / 1e6).toFixed(0)}MB for ${entry.runtime || "?"}min`,
+      };
+    }
   }
   return { ok: true };
 }
