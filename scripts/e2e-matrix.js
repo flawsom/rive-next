@@ -288,9 +288,12 @@ function sanityCheck(stream, entry) {
   if (JUNK_RE.test(hay))
     return { ok: false, reason: `junk name: ${label.slice(0, 60)}` };
   // Minted universal-tier HLS (videm relays) carries no title text and no
-  // byte count — the provider resolved the id upstream. Skip title/size,
-  // same exemption as the server-side gate.
-  const minted = stream.kind === "hls" && !stream.bytes;
+  // byte count — the provider resolved the id upstream. VidLink vault files
+  // are id-routed mints too (hash-named relay URLs). Skip title/size for
+  // both, same exemption as the server-side gate.
+  const minted =
+    (stream.kind === "hls" && !stream.bytes) ||
+    /(^|\.)mooncase\.online\//i.test(stream.url);
   if (!minted) {
     const toks = tokens(entry.title);
     const collapsed = hay.replace(/ /g, "");
@@ -315,6 +318,13 @@ function sanityCheck(stream, entry) {
 }
 
 async function probeWinner(stream) {
+  // VidLink's vault relay is Cloudflare-gated to residential IPs: our
+  // serverless proxy (any datacenter probe) gets 403 while the user's
+  // browser passes and mounts it directly. Server probes are meaningless
+  // for it — classify as browser-direct instead of falsely failing.
+  if (/(^|\.)mooncase\.online\//i.test(stream.url)) {
+    return "browser-direct(cloudflare-gated)";
+  }
   const viaProxy = `/api/proxy/media?url=${encodeURIComponent(stream.url)}`;
   const url = `${BASE}${viaProxy}`;
   try {
@@ -392,7 +402,7 @@ async function runTitle(entry) {
       firstStream = stream;
       sanity = sanityCheck(stream, entry);
       probe = await probeWinner(stream);
-      probeOk = /^hls-manifest-ok|^file-ok/.test(probe);
+      probeOk = /^(hls-manifest-ok|file-ok|browser-direct)/.test(probe);
       if (sanity.ok && probeOk) break;
     }
     if (sanity.ok && probeOk) break;
@@ -411,7 +421,7 @@ async function runTitle(entry) {
   if (minted && !probeOk && /hls-bad\(403\)/.test(probe)) {
     await new Promise((r) => setTimeout(r, 4000));
     probe = await probeWinner(firstStream);
-    probeOk = /^hls-manifest-ok|^file-ok/.test(probe);
+    probeOk = /^(hls-manifest-ok|file-ok|browser-direct)/.test(probe);
   }
   if (!probeOk && minted && /hls-bad\(403\)/.test(probe)) {
     return {

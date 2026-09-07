@@ -281,7 +281,12 @@ export async function fetchVidlinkDirect(
           : quality.url;
         if (!url) continue;
         const bytes = Number(quality.size) || undefined;
-        const rank = Number(qualityLabel) || undefined;
+        const rankNum = Number(qualityLabel) || 0;
+        // Rank ONLY top-rung files (≥1080p): these lead even over the videm
+        // HLS ladders. Sub-1080 rungs must NOT carry a rank — the old
+        // behavior let a 360p file outrank another tier's 1080p ABR ladder
+        // (the curated e2e caught Dark Knight/Inception regressing to
+        // VidLink 360p). Unranked rungs fall back to kind-then-bytes order.
         out.push({
           url,
           kind: "mp4",
@@ -290,7 +295,7 @@ export async function fetchVidlinkDirect(
             quality.codecName ? ` ${quality.codecName}` : ""
           }`,
           bytes,
-          rank,
+          rank: rankNum >= 1080 ? rankNum : undefined,
           noServerProbe: true,
         });
       }
