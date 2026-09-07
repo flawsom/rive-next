@@ -770,6 +770,17 @@ concurrent load (rotation handles it per session); titles with no upstream
 source anywhere (e.g. Crash Landing on You in the last run) land on the
 sandboxed provider embed — the honest last resort.
 
+Follow-up (`b5c8a13`): the "spinner forever" class has a second member —
+**undecodable codecs/containers**. Hanuman Ansh extracted a 2.5GB
+`.mkv.mp4` (Matroska/HEVC wearing an mp4 name) that passed every check and
+stalled Chromium forever. The gate now hard-rejects undecodable containers
+(extension matched anywhere in the decoded path, so renames are caught but
+directory-name mentions like `item.mkv/File.mp4` are not), and soft-rejects
+HEVC-labeled files when any friendlier candidate exists. Curated matrix
+after the change: 23/24 DIRECT, the one miss being that title — its only
+upstream source is the poisoned file, so the sandboxed embed covers it
+until an upstream gains a decodable source.
+
 ## 7. Loose ends / open questions
 
 - `detail?type=undefined&id=undefined` was once reached by the user — the
