@@ -60,6 +60,12 @@ interface StreamCandidate {
   /** Where it was found: html | api */
   source: "html" | "api";
   label?: string;
+  /** File size in bytes when known (archive tier, catalog range-probes) —
+   *  the quality proxy that keeps a 10MB clip below a 4GB feature. */
+  bytes?: number;
+  /** Catalog quality rank (2160p > 1080p > 720p …) from the post's own
+   *  quality labels — dominates the kind/bytes order when present. */
+  rank?: number;
 }
 
 const MEDIA_URL_RE =
@@ -407,9 +413,13 @@ export default async function handler(
     candidates.push(...archive);
   }
 
-  // Dedupe by URL, prefer HLS (best player support). Archive candidates
-  // interleave by file size so the largest mp4 is tried first — a 10MB clip
-  // must not outrank the 218MB feature.
+  // Dedupe by URL, then order for the player:
+  //  1. Catalog quality rank (2160p > 1080p > 720p …) when the post labels
+  //     carry it — the user's report was exactly a 480p file outranking the
+  //     high-quality variant.
+  //  2. HLS first otherwise (best player support: quality/subtitle menus).
+  //  3. File size as the final tiebreak — a 10MB clip must not outrank the
+  //     218MB feature.
   const seen = new Set<string>();
   const deduped = candidates
     .filter((c) => {
@@ -418,11 +428,14 @@ export default async function handler(
       return true;
     })
     .sort((a, b) => {
-      const rank = (k: string) => (k === "hls" ? 0 : k === "mp4" ? 1 : 2);
-      if (rank(a.kind) !== rank(b.kind)) return rank(a.kind) - rank(b.kind);
-      const as = (a as StreamCandidate & { bytes?: number }).bytes || 0;
-      const bs = (b as StreamCandidate & { bytes?: number }).bytes || 0;
-      return bs - as;
+      if (a.rank !== undefined || b.rank !== undefined) {
+        const byRank = (b.rank ?? -1) - (a.rank ?? -1);
+        if (byRank !== 0) return byRank;
+      }
+      const kindRank = (k: string) => (k === "hls" ? 0 : k === "mp4" ? 1 : 2);
+      if (kindRank(a.kind) !== kindRank(b.kind))
+        return kindRank(a.kind) - kindRank(b.kind);
+      return (b.bytes || 0) - (a.bytes || 0);
     });
 
   // Liveness pass (bounded): HEAD-probe the front of the list and float LIVE

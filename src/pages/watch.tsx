@@ -414,6 +414,19 @@ const Watch = () => {
   // find the title — a false resolver miss must never cancel a stream that's
   // about to play. The switch fires only if extraction also comes up empty.
   const deferSwitchOnExtractRef = useRef(false);
+  // True while the direct-stream extraction for the CURRENT source is still
+  // running. A resolve miss during this window is NOT final: the extraction
+  // may still land a live stream for a catalog provider whose pages are
+  // server-blocked (hdhub4u verified live Sept 6 — resolve always misses
+  // while extract finds a playable 826 MB feature). Switching providers
+  // mid-flight discards that stream and restarts the walk — the visible
+  // "keeps switching between these" loop. The auto-switch waits for this
+  // flag to clear.
+  const extractInFlightRef = useRef(false);
+  const playbackModeRef = useRef<"direct" | "embed">("embed");
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+  }, [playbackMode]);
 
   useEffect(() => {
     setResolvedPage(null);
@@ -508,8 +521,23 @@ const Watch = () => {
         } else {
           // Verified miss: this provider genuinely doesn't have the title.
           // Fail fast into the auto-switch pipeline instead of hanging 30s.
+          // Catalog providers wait for the parallel direct-stream extraction
+          // first: their pages are server-blocked (hdhub4u), so a resolve
+          // miss is EXPECTED even when the extraction is about to land a
+          // playable stream — switching now discards it and restarts the
+          // cascade ("keeps switching between these").
           setResolveState("miss");
-          if (!resolveFailHandledRef.current) {
+          if (
+            currentProvider &&
+            !currentProvider.urlPattern &&
+            extractInFlightRef.current
+          ) {
+            // Catalog: the parallel extraction (tracked by extractInFlightRef)
+            // decides — it owns the switch when it settles empty. If it has
+            // already settled (flag false), the switch fires immediately
+            // below, exactly as before.
+            deferSwitchOnExtractRef.current = true;
+          } else if (!resolveFailHandledRef.current) {
             resolveFailHandledRef.current = true;
             iframeErrorRef.current?.();
           }
@@ -624,13 +652,14 @@ const Watch = () => {
   useEffect(() => {
     if (!currentProvider || !id || !type) return;
     if (
-      playbackMode === "direct" &&
+      playbackModeRef.current === "direct" &&
       directMediaCache.current[streamUrl || ""]
     ) {
       return; // already on a direct stream from the primary URL
     }
     const isUniversal = !!currentProvider.urlPattern;
     if (isUniversal) setDirectChecked(false); // hold the embed back
+    extractInFlightRef.current = true;
     setExtractedCandidates([]); // a fresh extraction replaces the old servers
     let cancelled = false;
     const controller = new AbortController();
@@ -711,13 +740,15 @@ const Watch = () => {
       } finally {
         // Direct attempt finished (found, empty, or errored) — the embed
         // fallback may now mount if no direct stream took over. If the
-        // resolver missed this universal while extraction was running, the
+        // resolver missed this provider while extraction was running, the
         // switch waits for this verdict: a stream that played means no
         // switch; an empty extraction means the title really is absent.
-        if (!cancelled && isUniversal) {
-          setDirectChecked(true);
+        if (!cancelled) {
+          extractInFlightRef.current = false;
+          if (isUniversal) setDirectChecked(true);
           if (
             !applied &&
+            playbackModeRef.current !== "direct" &&
             deferSwitchOnExtractRef.current &&
             !resolveFailHandledRef.current
           ) {
@@ -734,22 +765,28 @@ const Watch = () => {
     // take ~10s), so give it a generous window before letting the ad-laden
     // embed through — an early release is exactly how the provider's own
     // player flashes over ours.
-    const fallbackTimer = isUniversal
-      ? setTimeout(() => {
-          if (cancelled) return;
-          setDirectChecked(true);
-          // Extraction hung — if the resolver missed this universal, switch
-          // now rather than leaving the user on an empty player.
-          if (
-            !applied &&
-            deferSwitchOnExtractRef.current &&
-            !resolveFailHandledRef.current
-          ) {
-            resolveFailHandledRef.current = true;
-            iframeErrorRef.current?.();
-          }
-        }, 20000)
-      : null;
+    // Hang guard for BOTH tiers: universals wait 20s (their extraction gates
+    // the embed); catalogs get 12s (nothing is held back, so a hung
+    // extraction must still release a deferred resolve-miss switch).
+    const fallbackTimer = setTimeout(
+      () => {
+        if (cancelled) return;
+        extractInFlightRef.current = false;
+        if (isUniversal) setDirectChecked(true);
+        // Extraction hung — if the resolver missed this provider, switch now
+        // rather than leaving the user on an empty player.
+        if (
+          !applied &&
+          playbackModeRef.current !== "direct" &&
+          deferSwitchOnExtractRef.current &&
+          !resolveFailHandledRef.current
+        ) {
+          resolveFailHandledRef.current = true;
+          iframeErrorRef.current?.();
+        }
+      },
+      isUniversal ? 20000 : 25000,
+    );
     return () => {
       cancelled = true;
       controller.abort();
@@ -1178,6 +1215,9 @@ const Watch = () => {
     // NOTE: iframeLoading starts true, so a provider that never resolves
     // never reaches this effect through iframeLoading alone.
     if (resolveState === "loading" || resolveState === "idle") return;
+    // A pending extraction defer means the switch is deliberately held —
+    // not a hang. The extraction's own fallback timer owns the release.
+    if (deferSwitchOnExtractRef.current && extractInFlightRef.current) return;
     const timer = setTimeout(() => {
       if (document.visibilityState === "hidden") return;
       iframeErrorRef.current?.();
@@ -1194,6 +1234,9 @@ const Watch = () => {
   useEffect(() => {
     if (!streamUrl || iframeError || playbackMode === "direct") return;
     if (resolveState === "loading" || resolveState === "ok") return;
+    // Same defer guard as the watchdog above — an in-flight extraction that
+    // may still hand us a direct stream is not a dead embed.
+    if (deferSwitchOnExtractRef.current && extractInFlightRef.current) return;
     const timer = setTimeout(() => {
       if (document.visibilityState === "hidden") return;
       iframeErrorRef.current?.();
@@ -1592,7 +1635,15 @@ const Watch = () => {
       {playbackMode !== "direct" &&
         streamUrl &&
         !iframeError &&
-        (directChecked || !currentProvider?.urlPattern) && (
+        // Embed tiers:
+        //  • Universals keep the existing directChecked gate (extraction
+        //    gates the embed for id-routed providers).
+        //  • Catalog providers mount ONLY a verified resolved page. The old
+        //    `!currentProvider?.urlPattern` arm mounted the naive
+        //    /movie/{tmdbId} URL instantly — a guaranteed 404 on
+        //    WordPress-class sites that fired onLoad (false success) and
+        //    then cascaded through every provider.
+        (directChecked || resolvedPage?.url) && (
           <iframe
             ref={iframeRef}
             scrolling="no"

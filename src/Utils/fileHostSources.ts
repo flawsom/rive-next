@@ -113,6 +113,9 @@ export interface ProbeVerdict {
   finalUrl: string;
   contentType: string;
   kind: "hls" | "mp4" | "webm" | null;
+  /** Total file size in bytes when the probe response reports it — feeds
+   *  quality ranking (a 4K/1080p file is gigabytes, a clip is megabytes). */
+  bytes?: number;
 }
 
 /**
@@ -164,13 +167,22 @@ export async function probeDirectMedia(
       : /webm/.test(contentType)
         ? "webm"
         : "mp4";
+    // Size from the 1-byte range response (content-range total) or the
+    // declared content-length — the quality signal for the extractor's rank.
+    const rangeTotal = /\/(\d+)\s*$/.exec(
+      res.headers.get("content-range") || "",
+    );
+    const bytes =
+      (rangeTotal && Number(rangeTotal[1])) ||
+      Number(res.headers.get("content-length")) ||
+      undefined;
     // Drain the tiny body politely.
     try {
       await res.arrayBuffer();
     } catch {
       /* body already consumed or closed */
     }
-    return { ok: true, finalUrl, contentType, kind };
+    return { ok: true, finalUrl, contentType, kind, bytes };
   } catch {
     return fail();
   }
@@ -275,6 +287,10 @@ export interface DirectFileCandidate {
   kind: "hls" | "mp4" | "webm";
   source: "api";
   label?: string;
+  /** File size in bytes (from the range probe) — quality proxy. */
+  bytes?: number;
+  /** Catalog quality rank (2160p > 1080p > 720p …) from the post's labels. */
+  rank?: number;
 }
 
 // In-memory cache per serverless instance: catalog post → candidates (10 min).
@@ -315,39 +331,55 @@ export async function extractCatalogDirectStreams(
       }
     }
     // 1b. File-host buttons (HubCloud/FSL/GDFlix routes) — the main prize.
+    // Probed in PARALLEL (ranked order preserved): a single slow host must
+    // not eat the serverless time budget before the others answer — serial
+    // probing could blow the 55s function cap and kill the whole response.
     const links = extractFileHostLinks(page.html, pageUrl);
-    for (const link of links.slice(0, 3)) {
-      // The file-host PAGE may itself redirect straight to the file, or may
-      // be an interstitial listing its own /file routes — probe it first.
-      const v = await probeDirectMedia(link.url, pageUrl);
-      if (v.ok && v.kind) {
-        streams.push({
-          url: v.finalUrl,
-          kind: v.kind,
-          source: "api",
-          label: link.label,
-        });
-        continue;
-      }
-      // Interstitial: fetch the host page (direct works for file hosts) and
-      // probe ITS file routes.
-      const inner = await fetchPageSmart(link.url);
-      if (!inner?.html) continue;
-      const innerLinks = extractFileHostLinks(inner.html, link.url);
-      // Prefer inner routes on the SAME host (signed gateways), best-first.
-      for (const innerLink of innerLinks.slice(0, 3)) {
-        const v2 = await probeDirectMedia(innerLink.url, link.url);
-        if (v2.ok && v2.kind) {
-          streams.push({
-            url: v2.finalUrl,
-            kind: v2.kind,
-            source: "api",
-            label: `${link.label} • ${innerLink.label}`.slice(0, 90),
-          });
+    const linkResults = await Promise.all(
+      links.slice(0, 3).map(async (link): Promise<DirectFileCandidate[]> => {
+        // The file-host PAGE may itself redirect straight to the file, or
+        // may be an interstitial listing its own /file routes — probe it.
+        const v = await probeDirectMedia(link.url, pageUrl);
+        if (v.ok && v.kind) {
+          return [
+            {
+              url: v.finalUrl,
+              kind: v.kind,
+              source: "api",
+              label: link.label,
+              bytes: v.bytes,
+              rank: link.rank,
+            },
+          ];
         }
-        if (streams.length >= 6) break;
-      }
+        // Interstitial: fetch the host page (direct works for file hosts) and
+        // probe ITS file routes — same host, ranked best-first.
+        const inner = await fetchPageSmart(link.url);
+        if (!inner?.html) return [];
+        const innerLinks = extractFileHostLinks(inner.html, link.url);
+        const innerResults = await Promise.all(
+          innerLinks
+            .slice(0, 3)
+            .map(async (innerLink): Promise<DirectFileCandidate | null> => {
+              const v2 = await probeDirectMedia(innerLink.url, link.url);
+              if (!v2.ok || !v2.kind) return null;
+              return {
+                url: v2.finalUrl,
+                kind: v2.kind,
+                source: "api",
+                label: `${link.label} • ${innerLink.label}`.slice(0, 90),
+                bytes: v2.bytes,
+                // Outer route quality dominates; inner refines within a tie.
+                rank: link.rank + Math.min(innerLink.rank, 9) / 10,
+              };
+            }),
+        );
+        return innerResults.filter((r): r is DirectFileCandidate => r !== null);
+      }),
+    );
+    for (const candidate of linkResults.flat()) {
       if (streams.length >= 6) break;
+      streams.push(candidate);
     }
   }
 
