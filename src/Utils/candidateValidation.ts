@@ -41,6 +41,23 @@ export interface ValidationContext {
 const JUNK_RE =
   /\b(trailer|teaser|promo|sample|sound ?test|5\.1|surround|aac ?test|dolby ?(vision|atmos)? ?(test|demo)|camrip|hdcam|hdts|\bcam\b|pdvd|dvdscr|screener|title ?sequence|opening ?titles|theme ?song|jukebox|lyrical|video ?song|song ?video|motion ?poster|recap)\b/i;
 
+/** Containers Chromium-class browsers cannot decode — Matroska (except
+ *  WebM), AVI, WMV, MPEG-PS/TS, FLV, VOB. Matches the extension ANYWHERE in
+ *  the path so a `.mkv.mp4` rename (a Matroska file wearing an mp4 name —
+ *  the exact "spinner forever" report) is caught too. The video element
+ *  happily downloads bytes it can never decode, which looks identical to a
+ *  stall to every server-side check.
+ */
+const BAD_CONTAINER_RE = /\.(mkv|m2ts|mts|ts|avi|wmv|flv|vob|mpg|mpeg)(\.|$)/i;
+
+/** HEVC payloads need hardware decode on Chromium — playable on some
+ *  machines, an un-decodable stall on most. Deprioritized: rejected when a
+ *  friendlier candidate exists, allowed as a last resort (a maybe-playable
+ *  HEVC file beats an empty list — the player's fallback pipeline still
+ *  catches the hard failures).
+ */
+const HEVC_RE = /\b(hevc|h ?\.?265|x ?265)\b/i;
+
 const STOPWORDS = new Set([
   "the",
   "a",
@@ -112,6 +129,28 @@ export interface ValidatableCandidate {
   bytes?: number;
 }
 
+/** Decoded URL path — encoded names (`%20`, `%2E`) must be inspected too. */
+function urlPath(url: string): string {
+  try {
+    return decodeURIComponent(new URL(url).pathname);
+  } catch {
+    return url;
+  }
+}
+
+/** Undecodable container in the filename (including `.mkv.mp4` disguises). */
+export function hasBadContainer(url: string): boolean {
+  return BAD_CONTAINER_RE.test(urlPath(url));
+}
+
+/** HEVC-advertising filename (container OR label). */
+export function isHevcLabeled(candidate: ValidatableCandidate): boolean {
+  return (
+    HEVC_RE.test(urlPath(candidate.url)) ||
+    HEVC_RE.test(normText(candidate.label || ""))
+  );
+}
+
 /** Minimum acceptable bytes for the given context. */
 export function minBytesFor(ctx: ValidationContext): number {
   const MB = 1_000_000;
@@ -134,6 +173,10 @@ export function isCandidateValid(
   ctx: ValidationContext,
 ): boolean {
   const haystack = normText(`${candidate.label || ""} ${candidate.url}`);
+
+  // 0) Undecodable container — the spinner-forever class of failure. No
+  // other rule matters if the browser can never decode the bytes.
+  if (hasBadContainer(candidate.url)) return false;
 
   // 1) Junk names.
   if (JUNK_RE.test(haystack)) return false;
@@ -168,11 +211,24 @@ export function isCandidateValid(
   return true;
 }
 
-/** Filter a candidate list, keeping only valid entries. */
+/**
+ * Filter a candidate list, keeping only valid entries.
+ *
+ * Two passes: first prefer candidates that are valid AND not HEVC-labeled
+ * (HEVC stalls on most Chromium machines); if that leaves nothing, accept
+ * HEVC-labeled ones — a maybe-playable file beats an empty list. The
+ * undecodable-container rule is HARD in both passes.
+ */
 export function validateCandidates<T extends ValidatableCandidate>(
   candidates: T[],
   ctx: ValidationContext,
 ): T[] {
-  if (!ctx.title) return candidates;
+  if (!ctx.title) {
+    return candidates.filter((c) => !hasBadContainer(c.url));
+  }
+  const clean = candidates.filter(
+    (c) => isCandidateValid(c, ctx) && !isHevcLabeled(c),
+  );
+  if (clean.length > 0) return clean;
   return candidates.filter((c) => isCandidateValid(c, ctx));
 }

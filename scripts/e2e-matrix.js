@@ -271,6 +271,20 @@ function sanityCheck(stream, entry) {
   if (!stream) return { ok: false, reason: "no candidate" };
   const label = String(stream.label || "");
   const hay = norm(`${label} ${stream.url}`);
+  // Undecodable container (incl. `.mkv.mp4` disguises) — the exact
+  // spinner-forever bug this suite exists to catch.
+  let urlPath = stream.url;
+  try {
+    urlPath = decodeURIComponent(new URL(stream.url).pathname);
+  } catch {
+    // keep raw url
+  }
+  if (/\.(mkv|m2ts|mts|ts|avi|wmv|flv|vob|mpg|mpeg)(\.|$)/i.test(urlPath)) {
+    return {
+      ok: false,
+      reason: `undecodable container: ${urlPath.slice(-50)}`,
+    };
+  }
   if (JUNK_RE.test(hay))
     return { ok: false, reason: `junk name: ${label.slice(0, 60)}` };
   // Minted universal-tier HLS (videm relays) carries no title text and no

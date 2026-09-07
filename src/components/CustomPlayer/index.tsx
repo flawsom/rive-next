@@ -63,10 +63,18 @@ const proxiedPath = (url: string) =>
 const isDirectFileHost = (url: string) => {
   try {
     const u = new URL(url);
-    return (
-      /^(?:[a-z0-9-]+\.)*archive\.org$/i.test(u.hostname) &&
-      /\.(mp4|webm)(\?|$)/i.test(u.pathname)
-    );
+    if (!/^(?:[a-z0-9-]+\.)*archive\.org$/i.test(u.hostname)) return false;
+    if (!/\.(mp4|webm)(\?|$)/i.test(u.pathname)) return false;
+    // Defense in depth: a `.mkv.mp4` rename passes the extension check but
+    // can never decode — never mount it directly. (The extraction gate
+    // already rejects it; this keeps a stale candidate out regardless.)
+    let path = u.pathname;
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // keep raw path
+    }
+    return !/\.(mkv|m2ts|mts|ts|avi|wmv|flv|vob|mpg|mpeg)(\.|$)/i.test(path);
   } catch {
     return false;
   }
