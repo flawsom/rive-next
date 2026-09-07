@@ -54,6 +54,24 @@ const proxiedQuery = (url: string) =>
 const proxiedPath = (url: string) =>
   `/api/proxy/media?url=${encodeURIComponent(url)}`;
 
+// Hosts the browser should fetch DIRECTLY (no proxy hop): archive.org serves
+// public files with no hotlink checks and no per-IP token binding, over
+// clean HTTPS. A multi-GB progressive file relayed through a serverless
+// function pays an execution-window cap plus two extra network legs per
+// byte — the classic endless-buffering failure — so native playback wins
+// wherever the host allows it. Everything else keeps the proxy.
+const isDirectFileHost = (url: string) => {
+  try {
+    const u = new URL(url);
+    return (
+      /^(?:[a-z0-9-]+\.)*archive\.org$/i.test(u.hostname) &&
+      /\.(mp4|webm)(\?|$)/i.test(u.pathname)
+    );
+  } catch {
+    return false;
+  }
+};
+
 interface SubtitleTrack {
   label: string;
   src: string;
@@ -247,6 +265,12 @@ const CustomPlayer = ({
   // the start on every server switch (directRetriedRef recovers the same
   // source with fresh tokens — position must survive that).
   const lastPositionRef = useRef(0);
+  // Direct-first playback lifecycle for browser-fetchable hosts:
+  // "pending" while the direct mount awaits proof of life, "ok" once
+  // metadata arrives, "swapped" after the automatic proxy fallback took
+  // over (error or 8s watchdog without metadata).
+  const directStateRef = useRef<"none" | "pending" | "ok" | "swapped">("none");
+  const directWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const prefsRef = useRef<PlayerPrefs>(loadPrefs());
 
@@ -400,13 +424,45 @@ const CustomPlayer = ({
     rebuffersRef.current = 0;
     t0Ref.current = performance.now();
 
+    // applyStart must run exactly once per mounted source — the direct→
+    // proxy fallback re-fires loadedmetadata, and re-applying would yank
+    // the playhead back to the resume position mid-session.
+    let startApplied = false;
     const applyStart = () => {
+      if (startApplied) return;
+      startApplied = true;
       if (startSecondsRef.current > 0 && video.duration > 0) {
         video.currentTime = Math.min(
           startSecondsRef.current,
           video.duration - 1,
         );
       }
+    };
+
+    // Direct → proxy fallback: re-mount the SAME source through our origin,
+    // preserving whatever position the direct attempt reached. A no-op
+    // unless a direct mount is actually pending (guard makes it safe to
+    // reference from listeners registered for every engine).
+    const swapToProxy = () => {
+      if (destroyed || directStateRef.current !== "pending") return;
+      directStateRef.current = "swapped";
+      if (directWatchdogRef.current) {
+        clearTimeout(directWatchdogRef.current);
+        directWatchdogRef.current = null;
+      }
+      const at = video.currentTime;
+      video.src = proxiedQuery(src);
+      video.addEventListener(
+        "loadedmetadata",
+        () => {
+          if (at > 0 && video.duration > 0 && at < video.duration) {
+            video.currentTime = at;
+          }
+        },
+        { once: true },
+      );
+      setWaiting(false);
+      video.play().catch(() => setPlaying(false));
     };
 
     if (isDashUrl(src)) {
@@ -643,6 +699,16 @@ const CustomPlayer = ({
         }
       });
       hls.attachMedia(video);
+    } else if (isDirectFileHost(src)) {
+      // ─── Direct tier: browser fetches archive.org natively ─────────────────
+      // No serverless hop, no execution-window cap, native range requests
+      // and the browser's own retry/cache behavior. On error or a slow
+      // start (no metadata within 8s) swapToProxy falls back transparently.
+      directStateRef.current = "pending";
+      video.src = src;
+      setWaiting(false);
+      video.play().catch(() => setPlaying(false));
+      directWatchdogRef.current = setTimeout(swapToProxy, 8000);
     } else {
       video.src = proxiedQuery(src);
       setWaiting(false);
@@ -653,6 +719,15 @@ const CustomPlayer = ({
     const onLoaded = () => {
       setDuration(video.duration || 0);
       applyStart();
+      // Metadata arrived → the direct mount is alive; disarm the proxy
+      // fallback watchdog.
+      if (directStateRef.current === "pending") {
+        directStateRef.current = "ok";
+        if (directWatchdogRef.current) {
+          clearTimeout(directWatchdogRef.current);
+          directWatchdogRef.current = null;
+        }
+      }
     };
     video.addEventListener("loadedmetadata", onLoaded);
     video.addEventListener("loadeddata", () => setWaiting(false));
@@ -695,6 +770,12 @@ const CustomPlayer = ({
       onEnded?.();
     });
     video.addEventListener("error", () => {
+      // A failing DIRECT mount falls back to the proxied URL first —
+      // only rotate to the next provider if the proxy path also dies.
+      if (directStateRef.current === "pending") {
+        swapToProxy();
+        return;
+      }
       trackError();
       onFail?.("Playback error");
     });
@@ -767,6 +848,11 @@ const CustomPlayer = ({
 
     return () => {
       destroyed = true;
+      if (directWatchdogRef.current) {
+        clearTimeout(directWatchdogRef.current);
+        directWatchdogRef.current = null;
+      }
+      directStateRef.current = "none";
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

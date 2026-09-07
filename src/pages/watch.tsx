@@ -706,6 +706,27 @@ const Watch = () => {
           // re-mints the identical token on re-extract, and re-assigning it
           // remounts a dead stream (the "keeps on retrying" loop).
           if (failedDirectUrls.current.has(candidate.url)) continue;
+          // archive.org files were range-verified server-side during
+          // extraction and the player mounts them DIRECTLY in the browser
+          // (no proxy hop) — skip the redundant HEAD so a verified file
+          // mounts the moment extraction lands.
+          if (
+            /\.(mp4|webm)(\?|$)/i.test(candidate.url) &&
+            /(^|\.)archive\.org\//i.test(candidate.url)
+          ) {
+            if (cancelled) return;
+            applied = true;
+            directMediaCache.current[candidate.url] = true;
+            setStreamOverride(candidate.url);
+            setIframeError(false);
+            setIframeLoading(false);
+            toast.success("Direct stream found", {
+              description: `${candidate.kind.toUpperCase()} • native quality & subtitle controls enabled`,
+              duration: 3000,
+              position: "top-center",
+            });
+            return;
+          }
           try {
             const head = await fetch(
               `/api/proxy/media?url=${encodeURIComponent(candidate.url)}`,
