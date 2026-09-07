@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import styles from "./style.module.scss";
 import Link from "next/link";
-import { safeDetailHref } from "@/Utils/safeLinks";
+import { safeDetailHref, safeWatchHref } from "@/Utils/safeLinks";
 import { motion, AnimatePresence } from "framer-motion";
 import Skeleton from "react-loading-skeleton";
 import axiosFetch from "@/Utils/fetchBackend";
@@ -41,7 +41,10 @@ const MovieCardLarge = ({ data, media_type, genresMovie, genresTv }: any) => {
   });
   console.log({ Genres });
   // Never render a dead link (guards /detail?type=undefined&id=undefined).
-  const href = safeDetailHref(data, media_type);
+  // CLICK → PLAYER: watch page first (player + details in one hop);
+  // collections/non-playable types fall back to their detail href.
+  const href =
+    safeWatchHref(data, media_type) || safeDetailHref(data, media_type);
   if (!href)
     return (
       <div className={styles.MovieCardSmall} aria-hidden="true">

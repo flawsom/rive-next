@@ -1,7 +1,7 @@
 import { useState } from "react";
 import styles from "./style.module.scss";
 import Link from "next/link";
-import { safeDetailHref } from "@/Utils/safeLinks";
+import { safeDetailHref, safeWatchHref } from "@/Utils/safeLinks";
 // import { motion, AnimatePresence } from "framer-motion";
 // import Skeleton from "react-loading-skeleton";
 
@@ -21,7 +21,12 @@ const MovieCardSmall = ({
   const [imagePlaceholder, setImagePlaceholder] = useState(false);
   // Never render a dead link: if id/type are missing the card is not clickable
   // (prevents /detail?type=undefined&id=undefined dead ends).
-  const link = customHref || safeDetailHref(data, media_type);
+  // CLICK → PLAYER: cards open the watch page directly (player + details in
+  // one hop). Collections/non-playable types fall back to their detail href.
+  const link =
+    customHref ||
+    safeWatchHref(data, media_type) ||
+    safeDetailHref(data, media_type);
   if (!link)
     return <div className={styles.MovieCardSmall} aria-hidden="true" />;
   return (

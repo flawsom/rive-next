@@ -23,10 +23,22 @@
 //
 // Usage: node scripts/e2e-matrix.js https://open-stream-khaki.vercel.app
 
-const BASE = (process.argv[2] || "http://localhost:3000").replace(/\/$/, "");
+const argv = process.argv.slice(2);
+const BASE = (
+  argv[0] && !argv[0].startsWith("--") ? argv[0] : "http://localhost:3000"
+).replace(/\/$/, "");
+// --random N: sample N titles from the live TMDB catalog via the app's own
+// backendfetch proxy (popular/top-rated movies & series, JP anime, KR
+// K-drama) and run the consumer chain against them. Fast mode: universal
+// tier only + shorter timeouts — matches what the page reaches first.
+const RANDOM_N = (() => {
+  const i = argv.indexOf("--random");
+  return i !== -1 ? Math.max(1, Number(argv[i + 1]) || 100) : 0;
+})();
+const FAST = RANDOM_N > 0;
 const CONCURRENCY = 3;
-const EXTRACT_TIMEOUT_MS = 55_000;
-const MAX_EXTRACT_CALLS = 3;
+const EXTRACT_TIMEOUT_MS = FAST ? 30_000 : 55_000;
+const MAX_EXTRACT_CALLS = FAST ? 2 : 3;
 
 // Curated consumer matrix across every content type. Runtimes (minutes)
 // anchor the watchable-bitrate validation exactly like the TMDB data the
@@ -327,7 +339,10 @@ async function runTitle(entry) {
   };
   push(best?.provider?.id);
   for (const u of UNIVERSAL) push(u);
-  push("hdhub4u");
+  // In random/fast mode skip the catalog walk: server-side catalog extracts
+  // burn ~55s each on CF-blocked domains (the real page reaches them only
+  // after a client-side pageUrl resolve, which the runner cannot simulate).
+  if (!FAST) push("hdhub4u");
 
   const paramsBase = new URLSearchParams({
     type: entry.type,
@@ -342,7 +357,12 @@ async function runTitle(entry) {
   let calls = 0;
   let firstStream = null;
   let sanity = { ok: false, reason: "no candidate" };
+  let probe = "no candidate";
+  let probeOk = false;
   let lastError = null;
+  // Mirror the watch page's silent server rotation: a dead streams[0] (e.g.
+  // a minted ref whose upstream 404s) must not fail the title while the
+  // response carries two more live servers — try each until one probes OK.
   for (const providerId of providerOrder) {
     if (calls >= MAX_EXTRACT_CALLS) break;
     calls += 1;
@@ -353,11 +373,15 @@ async function runTitle(entry) {
       lastError = "extract timeout";
       continue;
     }
-    const streams = res.streams || [];
-    if (streams.length === 0) continue;
-    firstStream = streams[0];
-    sanity = sanityCheck(firstStream, entry);
-    break;
+    const streams = (res.streams || []).slice(0, 3);
+    for (const stream of streams) {
+      firstStream = stream;
+      sanity = sanityCheck(stream, entry);
+      probe = await probeWinner(stream);
+      probeOk = /^hls-manifest-ok|^file-ok/.test(probe);
+      if (sanity.ok && probeOk) break;
+    }
+    if (sanity.ok && probeOk) break;
   }
   if (!firstStream) {
     return {
@@ -366,16 +390,15 @@ async function runTitle(entry) {
       detail: `no validated candidate in ${calls} walk steps${lastError ? ` (${lastError})` : ""}`,
     };
   }
-  let probe = await probeWinner(firstStream);
-  // videm throttles play-minting per IP — a 403 under a 24-title burst is
-  // the probe's own doing, not a product failure (one fresh mint + a short
+  // videm throttles play-minting per IP — a 403 under a burst is the
+  // probe's own doing, not a product failure (one fresh mint + a short
   // pause plays fine, verified live). Retry once before classifying.
   const minted = firstStream.kind === "hls" && !firstStream.bytes;
-  if (minted && /hls-bad\(403\)/.test(probe)) {
+  if (minted && !probeOk && /hls-bad\(403\)/.test(probe)) {
     await new Promise((r) => setTimeout(r, 4000));
     probe = await probeWinner(firstStream);
+    probeOk = /^hls-manifest-ok|^file-ok/.test(probe);
   }
-  const probeOk = /^hls-manifest-ok|^file-ok/.test(probe);
   if (!probeOk && minted && /hls-bad\(403\)/.test(probe)) {
     return {
       entry,
@@ -393,15 +416,113 @@ async function runTitle(entry) {
   };
 }
 
+// ─── Random catalog sampling (--random N) ────────────────────────────────
+async function fetchPool(request, params) {
+  const qs = new URLSearchParams({ requestID: request, ...params });
+  try {
+    const res = await fetch(`${BASE}/api/backendfetch?${qs}`, {
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await res.json();
+    return data?.results || [];
+  } catch {
+    return [];
+  }
+}
+
+function entryFromTmdb(item, type, category) {
+  const id = item?.id;
+  const title = item?.title || item?.name;
+  if (!id || !title) return null;
+  const date = item.release_date || item.first_air_date || "";
+  return {
+    title,
+    year: date ? Number(date.slice(0, 4)) || undefined : undefined,
+    type,
+    id,
+    category,
+    ...(type === "tv" ? { season: 1, episode: 1 } : {}),
+  };
+}
+
+async function buildRandomPool() {
+  const pages = (n) => Array.from({ length: n }, (_, i) => String(i + 1));
+  const jobs = [
+    ...pages(3).map((page) =>
+      fetchPool("popularMovie", { page }).then((r) =>
+        r.map((x) => entryFromTmdb(x, "movie", "movie")),
+      ),
+    ),
+    ...pages(1).map((page) =>
+      fetchPool("topRatedMovie", { page }).then((r) =>
+        r.map((x) => entryFromTmdb(x, "movie", "movie")),
+      ),
+    ),
+    ...pages(2).map((page) =>
+      fetchPool("popularTv", { page }).then((r) =>
+        r.map((x) => entryFromTmdb(x, "tv", "series")),
+      ),
+    ),
+    ...pages(1).map((page) =>
+      fetchPool("topRatedTv", { page }).then((r) =>
+        r.map((x) => entryFromTmdb(x, "tv", "series")),
+      ),
+    ),
+    ...pages(2).map((page) =>
+      fetchPool("filterTv", {
+        page,
+        country: "JP",
+        genreKeywords: "16", // animation × origin JP = anime
+      }).then((r) => r.map((x) => entryFromTmdb(x, "tv", "anime"))),
+    ),
+    ...pages(2).map((page) =>
+      fetchPool("filterTv", {
+        page,
+        country: "KR",
+        genreKeywords: "18", // drama × origin KR = K-drama
+      }).then((r) => r.map((x) => entryFromTmdb(x, "tv", "kdrama"))),
+    ),
+  ];
+  const settled = await Promise.all(jobs);
+  const seen = new Set();
+  const pool = [];
+  for (const list of settled) {
+    for (const e of list) {
+      if (!e) continue;
+      const key = `${e.type}:${e.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pool.push(e);
+    }
+  }
+  // Fisher-Yates shuffle, then sample.
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool;
+}
+
 (async () => {
+  let matrix = MATRIX;
+  if (RANDOM_N > 0) {
+    console.log(
+      `Sampling ${RANDOM_N} random titles from the live TMDB catalog…`,
+    );
+    const pool = await buildRandomPool();
+    matrix = pool.slice(0, RANDOM_N);
+    console.log(
+      `pool: ${pool.length} unique titles → testing ${matrix.length}\n`,
+    );
+  }
   console.log(`E2E consumer matrix → ${BASE}\n`);
   const results = [];
   let index = 0;
   const workers = Array.from({ length: CONCURRENCY }, async () => {
-    while (index < MATRIX.length) {
-      const entry = MATRIX[index++];
+    while (index < matrix.length) {
+      const entry = matrix[index++];
       process.stdout.write(
-        `· ${entry.title}${entry.season ? ` S${entry.season}E${entry.episode}` : ""}…\n`,
+        `· [${entry.category || entry.type}] ${entry.title}${entry.season ? ` S${entry.season}E${entry.episode}` : ""}…\n`,
       );
       const r = await runTitle(entry);
       results.push(r);
@@ -421,7 +542,7 @@ async function runTitle(entry) {
   results.sort((a, b) => order[a.verdict] - order[b.verdict]);
   console.log("\n══════════ CONSUMER E2E RESULTS ══════════");
   for (const r of results) {
-    const name = `${r.entry.title}${r.entry.season ? ` S${r.entry.season}E${r.entry.episode}` : ""} [${r.entry.type}]`;
+    const name = `${r.entry.title}${r.entry.season ? ` S${r.entry.season}E${r.entry.episode}` : ""} [${r.entry.category || r.entry.type}]`;
     console.log(`${r.verdict}  ${name}`);
     console.log(`          ${r.detail}`);
   }
@@ -431,6 +552,6 @@ async function runTitle(entry) {
   );
   console.log("\n─── summary ───");
   console.log(
-    `✅ DIRECT ${counts["✅ DIRECT"] || 0}/${MATRIX.length} · 🟠 THROTTLED ${counts["🟠 THROTTLED"] || 0} · 🟡 EMBED ${counts["🟡 EMBED"] || 0} · ❌ FAIL ${counts["❌ FAIL"] || 0}`,
+    `✅ DIRECT ${counts["✅ DIRECT"] || 0}/${matrix.length} · 🟠 THROTTLED ${counts["🟠 THROTTLED"] || 0} · 🟡 EMBED ${counts["🟡 EMBED"] || 0} · ❌ FAIL ${counts["❌ FAIL"] || 0}`,
   );
 })();

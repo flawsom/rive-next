@@ -491,7 +491,13 @@ export default async function handler(
       const verdicts = await Promise.all(probed.map((c) => probeAlive(c.url)));
       const alive = probed.filter((_, i) => verdicts[i]);
       const dead = probed.filter((_, i) => !verdicts[i]);
-      ordered = [...alive, ...dead, ...rest];
+      // A DEFINITIVELY dead probe (403/404 JSON from a removed item, an
+      // expired token) is noise the player would just have to rotate past —
+      // drop it whenever at least one live candidate exists. Keep everything
+      // when nothing probed alive (transient upstream flaps must not empty
+      // the response; the client's rotation still tries each).
+      ordered =
+        alive.length > 0 ? [...alive, ...rest] : [...alive, ...dead, ...rest];
     } catch {
       // never let liveness break the response
     }
