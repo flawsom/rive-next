@@ -35,6 +35,7 @@ import {
   buildEmbedUrl,
   ALL_PROVIDERS,
 } from "@/Utils/providers";
+import { VIDEM_DIRECT_PROVIDERS } from "@/Utils/videmSources";
 import {
   resolveStreamUrl,
   recordDomainFailure,
@@ -673,6 +674,10 @@ const Watch = () => {
     if (resolvedPage?.url) params.set("pageUrl", resolvedPage.url);
     const metaTitle = data?.title || data?.name;
     if (metaTitle) params.set("title", String(metaTitle));
+    // TMDB runtime drives the server's universal candidate validation
+    // (watchable-bitrate floor: bytes ÷ runtime).
+    const runtimeMin = data?.runtime || data?.episode_run_time;
+    if (runtimeMin) params.set("runtime", String(runtimeMin));
     if (data?.release_date || data?.first_air_date) {
       params.set(
         "year",
@@ -1018,14 +1023,22 @@ const Watch = () => {
     }
 
     // 1) Try the next untried provider in this category (deterministic walk).
+    // The UNIVERSAL tier (videm/2embed/vidlink/vidsrc) comes first: those
+    // mint real ad-free HLS for nearly every title in ~1-3s. Walking the
+    // alphabetical catalog list first burned 20-50s per dead catalog
+    // provider before the good tier was ever reached.
     const category = getSourceCategory();
-    const candidates =
+    const categoryList =
       getProvidersByCategory(category).length > 0
         ? getProvidersByCategory(category)
         : ALL_PROVIDERS.filter(
             (pr) =>
               pr.categories.includes("movie") || pr.categories.includes("tv"),
           );
+    const candidates = [
+      ...categoryList.filter((pr) => VIDEM_DIRECT_PROVIDERS.has(pr.id)),
+      ...categoryList.filter((pr) => !VIDEM_DIRECT_PROVIDERS.has(pr.id)),
+    ];
     const nextProvider =
       candidates.find(
         (pr) =>

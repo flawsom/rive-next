@@ -98,10 +98,14 @@ function pickBestFile(files: MetadataFile[]): {
   const sized = mp4s
     .map((f) => ({ name: f.name as string, bytes: Number(f.size) || 0 }))
     .sort((a, b) => b.bytes - a.bytes);
-  // Prefer a substantial feature-length file (>100MB); fall back to the
-  // largest available (silent shorts like 1902 are legitimately small).
+  // Prefer a substantial feature-length file (>100MB); then any file with a
+  // KNOWN size ≥40MB; an unsized file (metadata missing `size`) is the last
+  // resort only — unsized leaks were exactly how 6MB test clips slipped
+  // through as the "best" file of an item (silent shorts like 1902 remain
+  // reachable via the final fallback).
   const feature = sized.find((f) => f.bytes >= 100_000_000);
-  return feature || sized[0];
+  const known = sized.find((f) => f.bytes >= 40_000_000);
+  return feature || known || sized[0];
 }
 
 /**

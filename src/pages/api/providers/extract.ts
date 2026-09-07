@@ -19,6 +19,7 @@ import { findProviderById } from "@/Utils/providers";
 import { getOrBuildManifest } from "@/Utils/providerManifest";
 import { getCachedDomain } from "@/Utils/domainDiscovery";
 import { fetchVidemDirect, VIDEM_DIRECT_PROVIDERS } from "@/Utils/videmSources";
+import { validateCandidates } from "@/Utils/candidateValidation";
 import {
   extractCatalogDirectStreams,
   fetchPageSmart,
@@ -204,6 +205,9 @@ export default async function handler(
   const id = typeof req.query.id === "string" ? req.query.id.slice(0, 100) : "";
   const season = Number(req.query.season) || undefined;
   const episode = Number(req.query.episode) || undefined;
+  // TMDB runtime (movie length or episode length) — drives the universal
+  // candidate validation's watchable-bitrate floor.
+  const runtimeMin = Number(req.query.runtime) || undefined;
 
   if (!providerId || !findProviderById(providerId) || !id) {
     return res
@@ -411,6 +415,26 @@ export default async function handler(
       tvContext,
     );
     candidates.push(...archive);
+  }
+
+  // ── Universal candidate validation ──────────────────────────────────────
+  // One gate for EVERY tier (archive search, catalog file hosts, HTML/API
+  // scrapes, hint map): rejects junk names (trailers, samples, audio tests,
+  // cam rips), wrong-title matches (the archive text index is keyword-based
+  // and happily returns unrelated uploads), and sub-watchable bitrates
+  // (bytes vs runtime). A candidate that PLAYS but is WRONG never triggers
+  // any fallback pipeline — this gate is what keeps garbage out of the
+  // player for every movie, series, anime and K-drama. The videm HLS tier
+  // is exempt: minted per-title from the provider's id-resolved player
+  // state, with ABR ladders and no byte/title heuristics to check.
+  if (titleParam) {
+    const validated = validateCandidates(candidates, {
+      title: titleParam,
+      runtimeMinutes: runtimeMin,
+      isTv: type === "tv",
+    });
+    candidates.length = 0;
+    candidates.push(...validated);
   }
 
   // Dedupe by URL, then order for the player:
